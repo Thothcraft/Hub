@@ -26,6 +26,8 @@ const PLAN_W = 10; // meters, default plan extents
 const PLAN_H = 8;
 const SCALE = 60;  // px per meter
 
+type Mode = 'view' | 'zone' | 'place' | 'device';
+
 export default function SpacesPage() {
   const { get, post, put, delete: del } = useApi();
   const { user } = useAuth();
@@ -34,8 +36,16 @@ export default function SpacesPage() {
   const [devices, setDevices] = useState<DeviceInfo[]>([]);
   const [selected, setSelected] = useState<Space | null>(null);
   const [newName, setNewName] = useState('');
+  const [mode, setMode] = useState<Mode>('view');
   const [drawing, setDrawing] = useState<[number, number][]>([]);
   const [zoneName, setZoneName] = useState('');
+  const [pickDevice, setPickDevice] = useState<string | null>(null);
+  const [selPlacement, setSelPlacement] = useState<string | null>(null);
+  const [editing, setEditing] = useState(false);
+  const [editName, setEditName] = useState('');
+  const [editW, setEditW] = useState('10');
+  const [editH, setEditH] = useState('8');
+  const [editParent, setEditParent] = useState<string>('');
   const [error, setError] = useState<string | null>(null);
   const svgRef = useRef<SVGSVGElement>(null);
 
@@ -53,6 +63,11 @@ export default function SpacesPage() {
     } catch (e: any) {
       setError(e?.message || 'Failed to load spaces');
     }
+  }, [get]);
+
+  const refreshSelected = useCallback(async (id: number) => {
+    const fresh = await get(`/spaces/${id}`);
+    setSelected(fresh.space);
   }, [get]);
 
   useEffect(() => { load(); }, [load]);
@@ -78,6 +93,22 @@ export default function SpacesPage() {
     } catch (e: any) { setError(e?.message || 'Create failed'); }
   };
 
+  const saveSpaceEdits = async () => {
+    if (!selected) return;
+    try {
+      await put(`/spaces/${selected.id}`, {
+        name: editName.trim() || selected.name,
+        width_m: parseFloat(editW) || undefined,
+        height_m: parseFloat(editH) || undefined,
+        parent_id: editParent === '' ? undefined
+          : (editParent === 'none' ? null : parseInt(editParent, 10)),
+      });
+      setEditing(false);
+      await load();
+      await refreshSelected(selected.id);
+    } catch (e: any) { setError(e?.message || 'Save failed'); }
+  };
+
   const toPlan = (e: React.MouseEvent): [number, number] => {
     const rect = svgRef.current!.getBoundingClientRect();
     return [
@@ -88,18 +119,31 @@ export default function SpacesPage() {
 
   const onPlanClick = (e: React.MouseEvent) => {
     if (!selected) return;
-    setDrawing((pts) => [...pts, toPlan(e)]);
+    const [x, y] = toPlan(e);
+    if (mode === 'zone') {
+      setDrawing((pts) => [...pts, [x, y]]);
+    } else if (mode === 'place' && pickDevice) {
+      placeDevice(pickDevice, x, y);
+    } else if (mode === 'device' && selPlacement) {
+      movePlacement(selPlacement, x, y);
+    }
   };
 
   const saveZone = async () => {
     if (!selected || !zoneName.trim() || drawing.length < 3) return;
     try {
       await post(`/spaces/${selected.id}/zones`, { name: zoneName.trim(), polygon: drawing });
-      setDrawing([]); setZoneName('');
+      setDrawing([]); setZoneName(''); setMode('view');
       await load();
-      const fresh = await get(`/spaces/${selected.id}`);
-      setSelected(fresh.space);
+      await refreshSelected(selected.id);
     } catch (e: any) { setError(e?.message || 'Zone save failed'); }
+  };
+
+  const deleteZone = async (zoneId: number) => {
+    if (!selected) return;
+    await del(`/spaces/${selected.id}/zones/${zoneId}`);
+    await load();
+    await refreshSelected(selected.id);
   };
 
   const placeDevice = async (deviceId: string, x: number, y: number) => {
@@ -107,10 +151,47 @@ export default function SpacesPage() {
       await put(`/spaces/devices/${deviceId}/placement`, {
         space_id: selected!.id, x, y, rotation_deg: 0, fov_deg: 90, range_m: 8,
       });
+      setMode('device'); setSelPlacement(deviceId);
       await load();
-      const fresh = await get(`/spaces/${selected!.id}`);
-      setSelected(fresh.space);
+      await refreshSelected(selected!.id);
     } catch (e: any) { setError(e?.message || 'Placement failed'); }
+  };
+
+  const movePlacement = async (deviceId: string, x: number, y: number) => {
+    const cur = selected?.devices.find((d) => d.device_id === deviceId);
+    try {
+      await put(`/spaces/devices/${deviceId}/placement`, {
+        space_id: selected!.id, x, y,
+        rotation_deg: cur?.rotation_deg ?? 0,
+        fov_deg: cur?.fov_deg ?? 90,
+        range_m: cur?.range_m ?? 8,
+      });
+      await load();
+      await refreshSelected(selected!.id);
+    } catch (e: any) { setError(e?.message || 'Move failed'); }
+  };
+
+  const updatePlacement = async (deviceId: string, patch: Partial<Placement>) => {
+    const cur = selected?.devices.find((d) => d.device_id === deviceId);
+    if (!cur) return;
+    try {
+      await put(`/spaces/devices/${deviceId}/placement`, {
+        space_id: selected!.id,
+        x: patch.x ?? cur.x, y: patch.y ?? cur.y,
+        rotation_deg: patch.rotation_deg ?? cur.rotation_deg,
+        fov_deg: patch.fov_deg ?? cur.fov_deg,
+        range_m: patch.range_m ?? cur.range_m,
+      });
+      await load();
+      await refreshSelected(selected!.id);
+    } catch (e: any) { setError(e?.message || 'Update failed'); }
+  };
+
+  const removePlacement = async (deviceId: string) => {
+    await del(`/spaces/devices/${deviceId}/placement`);
+    setSelPlacement(null); setMode('view');
+    await load();
+    if (selected) await refreshSelected(selected.id);
   };
 
   const deleteSpace = async (id: number) => {
@@ -120,6 +201,8 @@ export default function SpacesPage() {
   };
 
   const state = selected ? states[selected.id] : null;
+  const placedIds = new Set((selected?.devices || []).map((d) => d.device_id));
+  const selPl = selected?.devices.find((d) => d.device_id === selPlacement);
 
   return (
     <div className="p-6 space-y-6">
@@ -152,7 +235,7 @@ export default function SpacesPage() {
           {spaces.map((s) => {
             const st = states[s.id];
             return (
-              <button key={s.id} onClick={() => setSelected(s)}
+              <button key={s.id} onClick={() => { setSelected(s); setMode('view'); setSelPlacement(null); setEditing(false); }}
                 className={`flex w-full items-center justify-between rounded border px-4 py-3 text-left ${
                   selected?.id === s.id ? 'border-blue-500 bg-neutral-800' : 'border-neutral-700 bg-neutral-900'
                 }`}>
@@ -161,9 +244,14 @@ export default function SpacesPage() {
                     {st?.occupied ? '●' : '○'}
                   </span>{' '}
                   {s.name}
+                  {s.parent_id && spaces.find((p) => p.id === s.parent_id) && (
+                    <span className="ml-2 text-xs text-neutral-500">
+                      in {spaces.find((p) => p.id === s.parent_id)?.name}
+                    </span>
+                  )}
                 </span>
                 <span className="text-xs text-neutral-400">
-                  {st ? `${st.people_count} people` : ''} · {s.zones.length} zones
+                  {st ? `${st.people_count} people` : ''} · {s.zones.length} zones · {s.devices.length} devices
                 </span>
               </button>
             );
@@ -179,14 +267,67 @@ export default function SpacesPage() {
             <div className="space-y-3">
               <div className="flex items-center justify-between">
                 <h2 className="text-lg font-medium">{selected.name}</h2>
-                <button onClick={() => deleteSpace(selected.id)}
-                  className="text-xs text-red-400 hover:underline">Delete space</button>
+                <div className="flex gap-3 text-xs">
+                  <button onClick={() => { setEditing(!editing); setEditName(selected.name);
+                      setEditW(String(selected.width_m ?? PLAN_W)); setEditH(String(selected.height_m ?? PLAN_H));
+                      setEditParent(selected.parent_id ? String(selected.parent_id) : 'none'); }}
+                    className="text-blue-400 hover:underline">
+                    {editing ? 'Cancel edit' : 'Edit space'}
+                  </button>
+                  <button onClick={() => deleteSpace(selected.id)}
+                    className="text-red-400 hover:underline">Delete space</button>
+                </div>
+              </div>
+
+              {editing && (
+                <div className="flex flex-wrap items-center gap-2 rounded border border-neutral-700 bg-neutral-900 p-3 text-sm">
+                  <input value={editName} onChange={(e) => setEditName(e.target.value)}
+                    placeholder="Name" className="rounded bg-neutral-800 px-2 py-1" />
+                  <label className="flex items-center gap-1 text-neutral-400">
+                    w <input value={editW} onChange={(e) => setEditW(e.target.value)}
+                      className="w-16 rounded bg-neutral-800 px-2 py-1" /> m
+                  </label>
+                  <label className="flex items-center gap-1 text-neutral-400">
+                    h <input value={editH} onChange={(e) => setEditH(e.target.value)}
+                      className="w-16 rounded bg-neutral-800 px-2 py-1" /> m
+                  </label>
+                  <select value={editParent} onChange={(e) => setEditParent(e.target.value)}
+                    className="rounded bg-neutral-800 px-2 py-1">
+                    <option value="">— no parent —</option>
+                    <option value="none">none (top-level / building)</option>
+                    {spaces.filter((s) => s.id !== selected.id).map((s) => (
+                      <option key={s.id} value={s.id}>inside: {s.name}</option>
+                    ))}
+                  </select>
+                  <button onClick={saveSpaceEdits}
+                    className="rounded bg-blue-600 px-3 py-1">Save</button>
+                </div>
+              )}
+
+              {/* mode toolbar */}
+              <div className="flex flex-wrap items-center gap-2 text-xs">
+                {(['view', 'zone', 'place', 'device'] as const).map((m) => (
+                  <button key={m}
+                    onClick={() => { setMode(m); setDrawing([]); }}
+                    className={`rounded px-3 py-1.5 ${mode === m ? 'bg-blue-600' : 'bg-neutral-800 hover:bg-neutral-700'}`}>
+                    {{view: 'View', zone: 'Draw zone', place: 'Place device', device: 'Edit device'}[m]}
+                  </button>
+                ))}
+                <span className="text-neutral-500">
+                  {mode === 'zone' && 'Click the plan to add zone points'}
+                  {mode === 'place' && (pickDevice
+                    ? `Click the plan to place ${devices.find((d) => d.device_id === pickDevice)?.device_name ?? pickDevice}`
+                    : 'Pick a device below, then click the plan')}
+                  {mode === 'device' && (selPl
+                    ? `${selPl.device_name}: click plan to move, or edit below`
+                    : 'Click a placed device to edit it')}
+                </span>
               </div>
 
               <svg ref={svgRef} onClick={onPlanClick}
                 width={(selected.width_m || PLAN_W) * SCALE}
                 height={(selected.height_m || PLAN_H) * SCALE}
-                className="cursor-crosshair rounded border border-neutral-700 bg-neutral-950">
+                className={`rounded border border-neutral-700 bg-neutral-950 ${mode === 'view' ? 'cursor-default' : 'cursor-crosshair'}`}>
                 {/* grid */}
                 {Array.from({ length: Math.floor(selected.width_m || PLAN_W) + 1 }, (_, i) => (
                   <line key={`v${i}`} x1={i * SCALE} y1={0} x2={i * SCALE}
@@ -225,12 +366,19 @@ export default function SpacesPage() {
                   const rot = d.rotation_deg * (Math.PI / 180);
                   const r = d.range_m * SCALE;
                   const a1 = rot - half - Math.PI / 2, a2 = rot + half - Math.PI / 2;
+                  const sel = selPlacement === d.device_id;
                   return (
-                    <g key={d.device_id}>
+                    <g key={d.device_id} className={mode === 'device' ? 'cursor-pointer' : undefined}
+                      onClick={(e) => {
+                        if (mode !== 'device') return;
+                        e.stopPropagation();
+                        setSelPlacement(d.device_id);
+                      }}>
                       <path
                         d={`M ${cx} ${cy} L ${cx + r * Math.cos(a1)} ${cy + r * Math.sin(a1)} A ${r} ${r} 0 0 1 ${cx + r * Math.cos(a2)} ${cy + r * Math.sin(a2)} Z`}
-                        fill="rgba(168,85,247,0.12)" stroke="#a855f7" strokeWidth={1} />
-                      <circle cx={cx} cy={cy} r={6} fill="#a855f7" />
+                        fill={sel ? 'rgba(168,85,247,0.22)' : 'rgba(168,85,247,0.12)'}
+                        stroke={sel ? '#d8b4fe' : '#a855f7'} strokeWidth={sel ? 1.5 : 1} />
+                      <circle cx={cx} cy={cy} r={7} fill={sel ? '#d8b4fe' : '#a855f7'} />
                       <text x={cx + 9} y={cy + 4} fontSize={11} className="fill-neutral-300">
                         {d.device_name}
                       </text>
@@ -239,32 +387,71 @@ export default function SpacesPage() {
                 })}
               </svg>
 
-              {/* zone creation */}
-              <div className="flex items-center gap-2 text-sm">
-                <input value={zoneName} onChange={(e) => setZoneName(e.target.value)}
-                  placeholder="Zone name" className="rounded bg-neutral-800 px-3 py-1.5" />
-                <span className="text-neutral-400">
-                  {drawing.length ? `${drawing.length} points` : 'Click the plan to draw a zone'}
-                </span>
-                <button onClick={saveZone} disabled={drawing.length < 3 || !zoneName.trim()}
-                  className="rounded bg-blue-600 px-3 py-1.5 disabled:opacity-40">Save zone</button>
-                <button onClick={() => setDrawing([])}
-                  className="rounded bg-neutral-700 px-3 py-1.5">Clear</button>
-              </div>
-
-              {/* device placement */}
-              <div className="text-sm">
-                <p className="mb-1 text-neutral-400">Assign device (click sets position):</p>
-                <div className="flex flex-wrap gap-2">
-                  {devices.map((d) => (
-                    <button key={d.device_id}
-                      onClick={() => placeDevice(d.device_id, 1, 1)}
-                      className="rounded border border-neutral-700 px-3 py-1 hover:border-purple-500">
-                      {d.device_name} {d.online ? '🟢' : '⚫'}
-                    </button>
+              {mode === 'zone' && (
+                <div className="flex items-center gap-2 text-sm">
+                  <input value={zoneName} onChange={(e) => setZoneName(e.target.value)}
+                    placeholder="Zone name" className="rounded bg-neutral-800 px-3 py-1.5" />
+                  <span className="text-neutral-400">
+                    {drawing.length ? `${drawing.length} points` : 'Click the plan to draw a zone'}
+                  </span>
+                  <button onClick={saveZone} disabled={drawing.length < 3 || !zoneName.trim()}
+                    className="rounded bg-blue-600 px-3 py-1.5 disabled:opacity-40">Save zone</button>
+                  <button onClick={() => setDrawing([])}
+                    className="rounded bg-neutral-700 px-3 py-1.5">Clear</button>
+                </div>
+              )}
+              {mode === 'view' && selected.zones.length > 0 && (
+                <div className="flex flex-wrap gap-2 text-xs">
+                  {selected.zones.map((z) => (
+                    <span key={z.id} className="flex items-center gap-1 rounded bg-neutral-800 px-2 py-1">
+                      {z.name}
+                      <button onClick={() => deleteZone(z.id)}
+                        className="text-red-400 hover:text-red-300">×</button>
+                    </span>
                   ))}
                 </div>
-              </div>
+              )}
+
+              {mode === 'place' && (
+                <div className="text-sm">
+                  <p className="mb-1 text-neutral-400">Pick a device, then click the plan to drop it:</p>
+                  <div className="flex flex-wrap gap-2">
+                    {devices.map((d) => (
+                      <button key={d.device_id}
+                        onClick={() => setPickDevice(d.device_id)}
+                        className={`rounded border px-3 py-1 ${
+                          pickDevice === d.device_id ? 'border-purple-500 bg-purple-950' : 'border-neutral-700 hover:border-purple-500'
+                        }`}>
+                        {d.device_name} {d.online ? '🟢' : '⚫'}
+                        {placedIds.has(d.device_id) && <span className="ml-1 text-neutral-500">(placed)</span>}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
+              {mode === 'device' && selPl && (
+                <div className="flex flex-wrap items-center gap-4 rounded border border-neutral-700 bg-neutral-900 p-3 text-sm">
+                  <span className="font-medium">{selPl.device_name}</span>
+                  <label className="flex items-center gap-2 text-neutral-400">
+                    rot <input type="range" min={0} max={359} value={selPl.rotation_deg}
+                      onChange={(e) => updatePlacement(selPl.device_id, { rotation_deg: +e.target.value })}
+                      className="w-28" /> {Math.round(selPl.rotation_deg)}°
+                  </label>
+                  <label className="flex items-center gap-2 text-neutral-400">
+                    fov <input type="range" min={15} max={360} value={selPl.fov_deg}
+                      onChange={(e) => updatePlacement(selPl.device_id, { fov_deg: +e.target.value })}
+                      className="w-24" /> {Math.round(selPl.fov_deg)}°
+                  </label>
+                  <label className="flex items-center gap-2 text-neutral-400">
+                    range <input type="range" min={0.5} max={30} step={0.5} value={selPl.range_m}
+                      onChange={(e) => updatePlacement(selPl.device_id, { range_m: +e.target.value })}
+                      className="w-24" /> {selPl.range_m}m
+                  </label>
+                  <span className="text-neutral-500">x {selPl.x} · y {selPl.y}</span>
+                  <button onClick={() => removePlacement(selPl.device_id)}
+                    className="rounded bg-red-900/60 px-3 py-1 text-red-300">Remove</button>
+                </div>
+              )}
 
               {/* live state */}
               {state && (

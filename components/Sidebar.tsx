@@ -5,7 +5,7 @@ import { usePathname } from 'next/navigation';
 import { useState } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
 import CellLogo from '@/components/CellLogo';
-import { Home, Monitor, LogOut, Shield, UserRound, Settings, ChevronUp, Boxes, Map, BarChart3, BrainCircuit } from 'lucide-react';
+import { Home, Monitor, LogOut, Shield, UserRound, Settings, ChevronUp, Map, BarChart3, BrainCircuit, MessageSquare } from 'lucide-react';
 
 export default function Sidebar() {
   const pathname = usePathname();
@@ -17,7 +17,7 @@ export default function Sidebar() {
     { name: 'Devices', href: '/devices', icon: Monitor },
     { name: 'Spaces', href: '/spaces', icon: Map },
     { name: 'Context', href: '/context', icon: BrainCircuit },
-    { name: 'Models', href: '/models', icon: Boxes },
+    { name: 'Chat', href: '/chat', icon: MessageSquare },
     { name: 'Usage', href: '/usage', icon: BarChart3 },
     ...(user?.role === 1 ? [{ name: 'Admin', href: '/admin', icon: Shield }] : []),
   ];

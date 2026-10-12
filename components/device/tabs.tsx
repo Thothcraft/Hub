@@ -58,9 +58,10 @@ function Card({ title, children, actions }: { title: string; children: React.Rea
 /* Status                                                              */
 /* ------------------------------------------------------------------ */
 
-export function StatusTab({ deviceId, status, sensors }: TabProps & {
+export function StatusTab({ deviceId, status, sensors, registryInfo }: TabProps & {
   status: NodeStatus | null;
   sensors: NodeSensor[];
+  registryInfo?: { device_name?: string; device_type?: string; hardware_info?: Record<string, unknown>; last_seen?: string } | null;
 }) {
   const [predictions, setPredictions] = useState<Array<Record<string, unknown>>>([]);
 
@@ -78,8 +79,25 @@ export function StatusTab({ deviceId, status, sensors }: TabProps & {
     return () => { live = false; clearInterval(t); };
   }, [deviceId]);
 
+  const registeredSensors = registryInfo?.hardware_info?.sensors
+    ?? registryInfo?.hardware_info?.available_sensors;
+
   return (
     <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+      <Card title="Device information">
+        <dl className="grid grid-cols-2 gap-x-4 gap-y-2 text-sm">
+          {[
+            ['Name', registryInfo?.device_name || status?.name || deviceId],
+            ['Hardware', registryInfo?.device_type || String(registryInfo?.hardware_info?.device_type || 'Unknown')],
+            ['Hostname', String(registryInfo?.hardware_info?.hostname || '—')],
+            ['Last seen', registryInfo?.last_seen ? fmtTime(Date.parse(registryInfo.last_seen)) : '—'],
+          ].map(([k, v]) => <div key={k} className="flex justify-between gap-3 border-b border-slate-100 py-1"><dt className="text-slate-500">{k}</dt><dd className="text-right font-medium text-slate-800">{v}</dd></div>)}
+        </dl>
+        {Array.isArray(registeredSensors) && <details className="mt-3">
+          <summary className="cursor-pointer text-xs font-medium text-slate-600">Registered hardware sensor inventory</summary>
+          <pre className="mt-2 max-h-48 overflow-auto rounded-lg bg-slate-50 p-2 text-[11px] text-slate-700">{JSON.stringify(registeredSensors, null, 2)}</pre>
+        </details>}
+      </Card>
       <Card title="Node status">
         <dl className="grid grid-cols-2 gap-x-4 gap-y-2 text-sm">
           {[

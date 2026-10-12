@@ -16,6 +16,7 @@ import {
 } from 'lucide-react';
 import { DeviceContextPanel } from '@/components/context/DeviceContextPanel';
 import { useToast } from '@/contexts/ToastContext';
+import { useApi } from '@/hooks/useApi';
 import {
   MetadataDoc,
   NodeSensor,
@@ -47,6 +48,7 @@ const RoomScene = dynamic(() => import('@/components/device/RoomScene'), {
 });
 
 type TabId = 'status' | 'live' | 'layout' | 'captures' | 'models' | 'automations' | 'context';
+type DeviceRegistryInfo = { device_uuid: string; device_name?: string; device_type?: string; hardware_info?: Record<string, unknown>; last_seen?: string; };
 
 const TABS: Array<{ id: TabId; label: string; icon: typeof Radio }> = [
   { id: 'status', label: 'Status', icon: Radio },
@@ -65,6 +67,7 @@ export default function DeviceDashboardPage() {
   const params = useParams<{ deviceId: string }>();
   const router = useRouter();
   const toast = useToast();
+  const { get } = useApi();
   const deviceId = decodeURIComponent(String(params?.deviceId || ''));
 
   const [tab, setTab] = useState<TabId>('status');
@@ -76,8 +79,13 @@ export default function DeviceDashboardPage() {
   const [online, setOnline] = useState<boolean | null>(null);
   const [err, setErr] = useState('');
   const [selectedSensor, setSelectedSensor] = useState<string | null>(null);
+  const [registryInfo, setRegistryInfo] = useState<DeviceRegistryInfo | null>(null);
 
   const loadBasics = useCallback(async () => {
+    void get('/device/list?include_offline=true').then((res) => {
+      const rows = Array.isArray(res?.devices) ? res.devices as DeviceRegistryInfo[] : [];
+      setRegistryInfo(rows.find((row) => row.device_uuid === deviceId) ?? null);
+    }).catch(() => {});
     try {
       const [st, ss] = await Promise.all([
         nodeGet<NodeStatus>(deviceId, '/api/status'),
@@ -92,14 +100,22 @@ export default function DeviceDashboardPage() {
       setOnline(false);
       setErr(msg);
     }
+    let roomDoc: RoomDoc | null = null;
     try {
-      const res = await brainJson<{ room?: RoomDoc | null }>(
-        `/nodes/${encodeURIComponent(deviceId)}/room`);
-      if (res?.room) {
-        setRoom(res.room);
-        setSelRoom((prev) => prev || (res.room!.room_id ?? ''));
-      }
-    } catch { /* cached room is optional */ }
+      const nodeRoom = await nodeGet<RoomDoc | { room?: RoomDoc | null }>(deviceId, '/api/v1/room');
+      roomDoc = (nodeRoom as { room?: RoomDoc | null })?.room ?? nodeRoom as RoomDoc;
+    } catch { /* node may be offline; use Brain's last synchronized room */ }
+    if (!roomDoc?.name && !roomDoc?.dims && !roomDoc?.rooms?.length) {
+      try {
+        const cached = await brainJson<RoomDoc | { room?: RoomDoc | null }>(
+          `/nodes/${encodeURIComponent(deviceId)}/room`);
+        roomDoc = (cached as { room?: RoomDoc | null })?.room ?? cached as RoomDoc;
+      } catch { /* cached room is optional */ }
+    }
+    if (roomDoc && (roomDoc.name || roomDoc.dims || roomDoc.rooms?.length)) {
+      setRoom(roomDoc);
+      setSelRoom((prev) => prev || roomDoc!.room_id || '');
+    }
     try {
       const m = await nodeGet<MetadataDoc>(deviceId, '/api/v1/metadata');
       setMeta(m);
@@ -110,7 +126,7 @@ export default function DeviceDashboardPage() {
         });
       }
     } catch { /* metadata is optional on older nodes */ }
-  }, [deviceId]);
+  }, [deviceId, get]);
 
   useEffect(() => {
     loadBasics();
@@ -260,7 +276,7 @@ export default function DeviceDashboardPage() {
       </nav>
 
       {tab === 'status' && (
-        <StatusTab deviceId={deviceId} viewer={VIEWER} status={status} sensors={sensors} />
+        <StatusTab deviceId={deviceId} viewer={VIEWER} status={status} sensors={sensors} registryInfo={registryInfo} />
       )}
 
       {tab === 'live' && (

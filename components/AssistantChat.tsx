@@ -15,7 +15,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import {
   Bot, CheckCircle2, Eye, FileText, Loader2, Mic, MicOff,
-  Paperclip, Send, Volume2, X,
+  Paperclip, Send, Settings2, Volume2, X,
 } from 'lucide-react';
 
 // ---------------------------------------------------------------------------
@@ -46,6 +46,8 @@ interface Msg {
 }
 
 const HISTORY_LIMIT = 12;
+const HISTORY_KEY = 'thoth_chat_history_v1';
+const DEFAULT_CONFIG = { window_s: 900, max_bundle_chars: 0, include_scenes: true, include_descriptors: true, include_reference: true, include_builder: true, include_usage: true, include_persons_places: true };
 
 function authHeaders(): Record<string, string> {
   const h: Record<string, string> = {};
@@ -55,6 +57,16 @@ function authHeaders(): Record<string, string> {
     if (t) h.Authorization = `Bearer ${t}`;
   } catch { /* cookies still apply */ }
   return h;
+}
+
+function historyStorageKey(): string {
+  try {
+    const token = localStorage.getItem('auth_token') || sessionStorage.getItem('auth_token') || '';
+    const encoded = token.split('.')[1]?.replace(/-/g, '+').replace(/_/g, '/');
+    const payload = encoded ? JSON.parse(atob(encoded.padEnd(Math.ceil(encoded.length / 4) * 4, '='))) : {};
+    const account = payload.userId ?? payload.user_id ?? payload.sub ?? 'session';
+    return `${HISTORY_KEY}:${String(account)}`;
+  } catch { return `${HISTORY_KEY}:session`; }
 }
 
 // ---------------------------------------------------------------------------
@@ -233,8 +245,8 @@ function ContextDigest({ ctx }: { ctx: any }) {
 // The drawer
 // ---------------------------------------------------------------------------
 
-export default function AssistantChat() {
-  const [open, setOpen] = useState(false);
+export default function AssistantChat({ page = false }: { page?: boolean }) {
+  const [open, setOpen] = useState(page);
   const [messages, setMessages] = useState<Msg[]>([]);
   const [input, setInput] = useState('');
   const [files, setFiles] = useState<PendingFile[]>([]);
@@ -242,6 +254,9 @@ export default function AssistantChat() {
   const [recording, setRecording] = useState(false);
   const [voiceMode, setVoiceMode] = useState(false);
   const [ctxPreview, setCtxPreview] = useState<any | null>(null);
+  const [settingsOpen, setSettingsOpen] = useState(false);
+  const [chatConfig, setChatConfig] = useState(DEFAULT_CONFIG);
+  const [configMessage, setConfigMessage] = useState('');
 
   const scrollRef = useRef<HTMLDivElement>(null);
   const fileRef = useRef<HTMLInputElement>(null);
@@ -255,11 +270,38 @@ export default function AssistantChat() {
       { top: scrollRef.current.scrollHeight, behavior: 'smooth' }), 30);
 
   useEffect(() => {
+    try {
+      const saved = JSON.parse(localStorage.getItem(historyStorageKey()) || '[]');
+      if (Array.isArray(saved)) setMessages(saved.slice(-HISTORY_LIMIT * 2));
+    } catch { /* ignore corrupt local history */ }
     return () => {                       // unmount cleanup
       streamRef.current?.getTracks().forEach((t) => t.stop());
       audioRef.current?.pause();
     };
   }, []);
+
+  useEffect(() => {
+    try { localStorage.setItem(historyStorageKey(), JSON.stringify(messages.slice(-HISTORY_LIMIT * 2))); }
+    catch { /* storage may be disabled or full */ }
+  }, [messages]);
+
+  const loadSettings = async () => {
+    try {
+      const res = await fetch('/api/brain/chat/config', { headers: authHeaders(), cache: 'no-store' });
+      if (!res.ok) throw new Error(`settings unavailable (${res.status})`);
+      const data = await res.json();
+      setChatConfig({ ...DEFAULT_CONFIG, ...(data.config || {}) });
+      setConfigMessage('');
+    } catch (e: any) { setConfigMessage(e?.message || 'Could not load chat settings.'); }
+  };
+
+  const saveSettings = async () => {
+    try {
+      const res = await fetch('/api/brain/chat/config', { method: 'PUT', headers: { 'Content-Type': 'application/json', ...authHeaders() }, body: JSON.stringify(chatConfig) });
+      if (!res.ok) throw new Error(`settings save failed (${res.status})`);
+      setConfigMessage('Settings saved.');
+    } catch (e: any) { setConfigMessage(e?.message || 'Could not save chat settings.'); }
+  };
 
   const speak = useCallback(async (text: string) => {
     try {
@@ -417,9 +459,9 @@ export default function AssistantChat() {
   // -- render -----------------------------------------------------------------
 
   return (
-    <div className="fixed bottom-5 right-5 z-50 flex flex-col items-end gap-2">
+    <div className={page ? 'flex h-[min(78vh,900px)] min-h-[520px] w-full flex-col' : 'fixed bottom-5 right-5 z-50 flex flex-col items-end gap-2'}>
       {open && (
-        <div className="flex h-[600px] max-h-[80vh] w-[400px] max-w-[92vw] flex-col overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-2xl">
+        <div className={page ? 'flex min-h-0 flex-1 flex-col overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm' : 'flex h-[600px] max-h-[80vh] w-[400px] max-w-[92vw] flex-col overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-2xl'}>
           {/* header */}
           <div className="flex items-center gap-2 bg-slate-950 px-4 py-3 text-white">
             <Bot size={18} />
@@ -431,14 +473,16 @@ export default function AssistantChat() {
               className={`rounded p-1.5 hover:bg-slate-800 ${ctxPreview ? 'bg-slate-800 text-indigo-300' : ''}`}>
               <Eye size={16} />
             </button>
+            <button onClick={() => { setSettingsOpen((v) => !v); if (!settingsOpen) void loadSettings(); }} title="Chat settings" className={`rounded p-1.5 hover:bg-slate-800 ${settingsOpen ? 'bg-slate-800 text-indigo-300' : ''}`}><Settings2 size={16} /></button>
+            {page && <button onClick={() => { setMessages([]); localStorage.removeItem(historyStorageKey()); }} title="Clear chat history" className="rounded px-2 py-1 text-[11px] text-slate-300 hover:bg-slate-800">New chat</button>}
             <button onClick={() => setVoiceMode((v) => !v)}
               title={voiceMode ? 'Voice replies on' : 'Voice replies off'}
               className={`rounded p-1.5 hover:bg-slate-800 ${voiceMode ? 'bg-indigo-600' : ''}`}>
               <Volume2 size={16} />
             </button>
-            <button onClick={() => setOpen(false)} className="rounded p-1.5 hover:bg-slate-800">
+            {!page && <button onClick={() => setOpen(false)} className="rounded p-1.5 hover:bg-slate-800">
               <X size={16} />
-            </button>
+            </button>}
           </div>
 
           {ctxPreview && (
@@ -446,6 +490,14 @@ export default function AssistantChat() {
               <ContextDigest ctx={ctxPreview} />
             </div>
           )}
+
+          {settingsOpen && <div className="max-h-56 overflow-auto border-b border-slate-200 bg-white p-3 text-xs text-slate-700">
+            <div className="mb-2 font-semibold">Context and memory</div>
+            <label className="flex items-center justify-between gap-4 py-1">Context window (seconds)<input type="number" min={60} max={86400} value={chatConfig.window_s} onChange={(e) => setChatConfig({ ...chatConfig, window_s: Number(e.target.value) })} className="w-28 rounded border px-2 py-1" /></label>
+            {(['include_scenes', 'include_descriptors', 'include_reference', 'include_builder', 'include_usage', 'include_persons_places'] as const).map((key) => <label key={key} className="flex items-center gap-2 py-1"><input type="checkbox" checked={chatConfig[key]} onChange={(e) => setChatConfig({ ...chatConfig, [key]: e.target.checked })} />{key.replace('include_', '').replaceAll('_', ' ')}</label>)}
+            <div className="mt-2 flex items-center gap-3"><button onClick={() => void saveSettings()} className="rounded bg-indigo-600 px-3 py-1.5 font-medium text-white">Save settings</button><span>{configMessage}</span></div>
+            <p className="mt-2 text-[10px] text-slate-500">Context memory is the live context map. Conversation history is saved in this browser.</p>
+          </div>}
 
           {/* messages */}
           <div ref={scrollRef} className="flex-1 space-y-3 overflow-y-auto bg-slate-50 p-3">
@@ -541,12 +593,12 @@ export default function AssistantChat() {
         </div>
       )}
 
-      <button
+      {!page && <button
         onClick={() => setOpen((o) => !o)}
         className="flex h-14 w-14 items-center justify-center rounded-full bg-slate-950 text-white shadow-lg transition hover:bg-slate-800"
         aria-label="Open assistant">
         {open ? <X size={24} /> : <Bot size={24} />}
-      </button>
+      </button>}
     </div>
   );
 }

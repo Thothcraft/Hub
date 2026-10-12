@@ -41,7 +41,7 @@ export function EvidenceInspector() {
   useEffect(() => { load(); }, [load]);
 
   return (
-    <div className="space-y-3">
+    <div className="space-y-3 text-[#20231b]">
       <div className="flex flex-wrap items-center gap-2">
         <input value={key} onChange={(e) => setKey(e.target.value)}
           placeholder="key (e.g. ble.proximity.v1)"
@@ -50,7 +50,7 @@ export function EvidenceInspector() {
           placeholder="source id"
           className="rounded bg-[#ece8de] px-3 py-1.5 text-sm" />
         <button onClick={load}
-          className="rounded bg-[#11110f] px-3 py-1.5 text-sm hover:bg-[#6b7f4a]">
+          className="rounded bg-[#344323] px-3 py-1.5 text-sm text-white hover:bg-[#6b7f4a]">
           Apply
         </button>
         <span className="text-xs text-[#5b5953]">
@@ -98,9 +98,14 @@ export function EvidenceInspector() {
                       ? `${Math.round(e.confidence * 100)}%` : '—'}</td>
                   <td className="px-3 py-2 text-[#5b5953]">
                     {open === e.id
-                      ? <pre className="whitespace-pre-wrap font-mono">
-                          {JSON.stringify(e.provenance ?? {}, null, 1)}
-                        </pre>
+                      ? <div className="min-w-52 space-y-1 font-mono text-[10px]">
+                          <div>evidence: {e.id}</div>
+                          <div>device: {e.device_id ?? '—'}</div>
+                          <div>observation: {e.observation_id ?? '—'}</div>
+                          <div>prediction: {e.prediction_id ?? '—'}</div>
+                          <div>model: {e.model_id ?? '—'} {e.model_version ?? ''}</div>
+                          <pre className="whitespace-pre-wrap">{JSON.stringify(e.provenance ?? {}, null, 1)}</pre>
+                        </div>
                       : `${e.model_id ?? ''}${e.prediction_id ? ` · pred ${e.prediction_id}` : ''}`}
                   </td>
                 </tr>

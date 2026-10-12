@@ -90,7 +90,7 @@ export default function ContextPage() {
   );
 
   return (
-    <div className="p-4 md:p-6 space-y-5">
+    <div className="space-y-5 p-4 text-[#20231b] md:p-6">
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-semibold">Context</h1>
@@ -109,7 +109,7 @@ export default function ContextPage() {
         </button>
       </div>
 
-      {error && <p className="rounded bg-red-950/40 px-3 py-2 text-sm text-red-300">{error}</p>}
+      {error && <p className="rounded border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-800">{error}</p>}
 
       <nav className="flex flex-wrap gap-1 border-b border-[#c9c4b9]">
         {TABS.map(({ id, label, icon: Icon }) => (
@@ -173,7 +173,7 @@ function OverviewTab({ live, spaces, events, entities }: {
             className="mb-2 rounded border border-[#c9c4b9] px-3 py-2">
             <div className="flex items-center justify-between">
               <span className="text-sm">{s.name}</span>
-              <span className={`text-xs ${s.occupied ? 'text-green-400' : 'text-[#5b5953]'}`}>
+              <span className={`text-xs ${s.occupied ? 'font-semibold text-[#35561f]' : 'text-[#5b5953]'}`}>
                 {s.occupied ? `occupied · ${s.people_count}` : 'empty'}
               </span>
             </div>

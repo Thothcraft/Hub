@@ -113,7 +113,7 @@ export const contextApi = {
 
   createRelationship: (rel: { subject: string; predicate: string;
       object: string; confidence?: number; source?: string;
-      allow_unresolved?: boolean }) =>
+      allow_unresolved?: boolean; provenance?: Record<string, unknown> }) =>
     brainJson<CtxRelationship>('/context/relationships', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },

@@ -3,7 +3,7 @@
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { useState } from 'react';
-import { Home, Monitor, MoreHorizontal, Settings, UserRound, LogOut, Boxes, Map, BrainCircuit } from 'lucide-react';
+import { Home, Monitor, MoreHorizontal, Settings, UserRound, LogOut, Map, BrainCircuit, MessageSquare } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
 
 export default function MobileNavigation() {
@@ -18,7 +18,7 @@ export default function MobileNavigation() {
   return <>
     {moreOpen && <div className="fixed inset-x-3 bottom-20 z-50 rounded-2xl border border-slate-300 bg-white p-3 shadow-xl md:hidden">
       <Link href="/spaces" onClick={() => setMoreOpen(false)} className="flex items-center gap-3 rounded-xl px-3 py-3 text-sm font-semibold"><Map className="h-5 w-5"/>Spaces</Link>
-      <Link href="/models" onClick={() => setMoreOpen(false)} className="flex items-center gap-3 rounded-xl px-3 py-3 text-sm font-semibold"><Boxes className="h-5 w-5"/>Models</Link>
+      <Link href="/chat" onClick={() => setMoreOpen(false)} className="flex items-center gap-3 rounded-xl px-3 py-3 text-sm font-semibold"><MessageSquare className="h-5 w-5"/>Chat</Link>
       <Link href="/profile" onClick={() => setMoreOpen(false)} className="flex items-center gap-3 rounded-xl px-3 py-3 text-sm font-semibold"><UserRound className="h-5 w-5"/>Profile</Link>
       <Link href="/settings" onClick={() => setMoreOpen(false)} className="flex items-center gap-3 rounded-xl px-3 py-3 text-sm font-semibold"><Settings className="h-5 w-5"/>Settings</Link>
       <button onClick={logout} className="flex w-full items-center gap-3 rounded-xl px-3 py-3 text-sm font-semibold text-red-700"><LogOut className="h-5 w-5"/>Sign out</button>

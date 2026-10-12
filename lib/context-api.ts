@@ -14,6 +14,9 @@ export interface CtxEntity {
   name?: string;
   attributes?: Record<string, unknown>;
   created_at?: number;
+  last_seen?: number;
+  confidence?: number;
+  confirmed?: boolean;
 }
 
 export interface CtxRelationship {

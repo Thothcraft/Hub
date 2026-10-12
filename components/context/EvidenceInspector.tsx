@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useState } from 'react';
 import { Loader2 } from 'lucide-react';
-import { contextApi, type CtxEvidence } from '@/lib/context-api';
+import { contextApi, type CtxEvidence } from '../../lib/context-api';
 
 const fmtTs = (ts?: number) =>
   ts ? new Date(ts * 1000).toLocaleString() : '—';
@@ -45,32 +45,32 @@ export function EvidenceInspector() {
       <div className="flex flex-wrap items-center gap-2">
         <input value={key} onChange={(e) => setKey(e.target.value)}
           placeholder="key (e.g. ble.proximity.v1)"
-          className="rounded bg-neutral-800 px-3 py-1.5 text-sm" />
+          className="rounded bg-[#ece8de] px-3 py-1.5 text-sm" />
         <input value={source} onChange={(e) => setSource(e.target.value)}
           placeholder="source id"
-          className="rounded bg-neutral-800 px-3 py-1.5 text-sm" />
+          className="rounded bg-[#ece8de] px-3 py-1.5 text-sm" />
         <button onClick={load}
-          className="rounded bg-blue-600 px-3 py-1.5 text-sm hover:bg-blue-500">
+          className="rounded bg-[#11110f] px-3 py-1.5 text-sm hover:bg-[#6b7f4a]">
           Apply
         </button>
-        <span className="text-xs text-neutral-500">
+        <span className="text-xs text-[#5b5953]">
           Evidence = raw observations/predictions — not asserted truth.
         </span>
       </div>
 
       {loading ? (
-        <div className="flex items-center gap-2 py-12 text-neutral-400">
+        <div className="flex items-center gap-2 py-12 text-[#5b5953]">
           <Loader2 className="h-4 w-4 animate-spin" /> Loading evidence…
         </div>
       ) : error ? (
         <p className="text-sm text-red-400">{error}</p>
       ) : rows.length === 0 ? (
-        <p className="py-12 text-center text-sm text-neutral-500">
+        <p className="py-12 text-center text-sm text-[#5b5953]">
           No evidence rows match.</p>
       ) : (
-        <div className="overflow-x-auto rounded-lg border border-neutral-800">
+        <div className="overflow-x-auto rounded-lg border border-[#c9c4b9]">
           <table className="w-full text-left text-xs">
-            <thead className="bg-neutral-900 text-neutral-400">
+            <thead className="bg-[#faf8f2] text-[#5b5953]">
               <tr>
                 <th className="px-3 py-2">time</th>
                 <th className="px-3 py-2">key</th>
@@ -83,20 +83,20 @@ export function EvidenceInspector() {
             <tbody>
               {rows.map((e) => (
                 <tr key={e.id}
-                  className="cursor-pointer border-t border-neutral-800 hover:bg-neutral-900"
+                  className="cursor-pointer border-t border-[#c9c4b9] hover:bg-[#faf8f2]"
                   onClick={() => setOpen(open === e.id ? null : e.id)}>
-                  <td className="px-3 py-2 text-neutral-500">{fmtTs(e.timestamp)}</td>
-                  <td className="px-3 py-2 font-mono text-blue-300">{e.key}</td>
+                  <td className="px-3 py-2 text-[#5b5953]">{fmtTs(e.timestamp)}</td>
+                  <td className="px-3 py-2 font-mono text-[#344323]">{e.key}</td>
                   <td className="px-3 py-2 font-mono">
                     {truncate(typeof e.value === 'object'
                       ? JSON.stringify(e.value) : String(e.value ?? ''))}
                   </td>
-                  <td className="px-3 py-2 text-neutral-400">
+                  <td className="px-3 py-2 text-[#5b5953]">
                     {e.source_id ?? e.device_id ?? '—'}</td>
                   <td className="px-3 py-2">
                     {e.confidence !== undefined
                       ? `${Math.round(e.confidence * 100)}%` : '—'}</td>
-                  <td className="px-3 py-2 text-neutral-500">
+                  <td className="px-3 py-2 text-[#5b5953]">
                     {open === e.id
                       ? <pre className="whitespace-pre-wrap font-mono">
                           {JSON.stringify(e.provenance ?? {}, null, 1)}

@@ -4,9 +4,9 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Loader2, Trash2 } from 'lucide-react';
 import {
   contextApi, type CtxEntity, type CtxRelationship, type CtxSnapshot,
-} from '@/lib/context-api';
+} from '../../lib/context-api';
 
-const KINDS = ['person', 'device', 'wearable', 'space', 'object'];
+const KINDS = ['person', 'device', 'wearable', 'space', 'building', 'object'];
 
 /**
  * Entities + relationship graph (Part 6): list with kind/name, create
@@ -66,62 +66,80 @@ export function EntityExplorer({ snapshot }: { snapshot: CtxSnapshot | null }) {
 
   return (
     <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
-      <section className="rounded-lg border border-neutral-800 bg-neutral-900 p-4">
+      <section className="rounded-lg border border-[#c9c4b9] bg-[#faf8f2] p-4">
         <h3 className="mb-3 text-sm font-semibold">Entities</h3>
         <div className="mb-3 flex gap-2">
           <select value={kind} onChange={(e) => setKind(e.target.value)}
-            className="rounded bg-neutral-800 px-2 py-1.5 text-sm">
+            className="rounded bg-[#ece8de] px-2 py-1.5 text-sm">
             {KINDS.map((k) => <option key={k} value={k}>{k}</option>)}
           </select>
           <input value={name} onChange={(e) => setName(e.target.value)}
-            placeholder="name" className="flex-1 rounded bg-neutral-800 px-3 py-1.5 text-sm"
+            placeholder="name" className="flex-1 rounded bg-[#ece8de] px-3 py-1.5 text-sm"
             onKeyDown={(e) => e.key === 'Enter' && create()} />
           <button onClick={create} disabled={busy}
-            className="rounded bg-blue-600 px-3 py-1.5 text-sm disabled:opacity-40">
+            className="rounded bg-[#11110f] px-3 py-1.5 text-sm disabled:opacity-40">
             Add
           </button>
         </div>
         {error && <p className="mb-2 text-xs text-red-400">{error}</p>}
         {!entities.length && (
-          <p className="text-xs text-neutral-500">
+          <p className="text-xs text-[#5b5953]">
             {snapshot ? 'No entities yet.' :
               <><Loader2 className="mr-1 inline h-3 w-3 animate-spin" />Loading…</>}
           </p>)}
         {entities.map((e) => (
           <button key={e.id} onClick={() => setSel(e.id === sel ? '' : e.id)}
             className={`mb-1 flex w-full items-center justify-between rounded border px-3 py-2 text-left text-sm ${
-              sel === e.id ? 'border-blue-500 bg-neutral-800' : 'border-neutral-800'}`}>
+              sel === e.id ? 'border-[#6b7f4a] bg-[#ece8de]' : 'border-[#c9c4b9]'}`}>
             <span>
-              <span className="mr-2 rounded bg-neutral-800 px-1.5 py-0.5 font-mono text-[10px] text-neutral-400">
+              <span className="mr-2 rounded bg-[#ece8de] px-1.5 py-0.5 font-mono text-[10px] text-[#5b5953]">
                 {e.kind}
               </span>
               {e.name ?? e.id}
             </span>
-            <span className="font-mono text-xs text-neutral-500">{e.id}</span>
+            <span className="font-mono text-xs text-[#5b5953]">{e.id}</span>
           </button>
         ))}
+        {sel && (() => {
+          const entity = entities.find((item) => item.id === sel);
+          if (!entity) return null;
+          return <div className="mt-3 rounded border border-[#c9c4b9] bg-[#f4f1e9] p-3 text-xs">
+            <div className="font-semibold">{entity.kind === 'building' ? 'Building' : entity.kind === 'person' ? 'Person' : 'Entity'} details</div>
+            <div className="mt-1 text-[#5b5953]">{entity.name || entity.id}</div>
+            {entity.created_at && <div className="mt-1 text-[#5b5953]">Added {new Date(entity.created_at * 1000).toLocaleString()}</div>}
+            {entity.last_seen && <div className="mt-1 text-[#5b5953]">Last observed {new Date(entity.last_seen * 1000).toLocaleString()}</div>}
+            {(entity.confidence != null || entity.confirmed != null) && <div className="mt-1 text-[#5b5953]">
+              {entity.confidence != null ? `Confidence ${Math.round(entity.confidence * 100)}%` : ''}
+              {entity.confidence != null && entity.confirmed != null ? ' · ' : ''}
+              {entity.confirmed != null ? (entity.confirmed ? 'confirmed' : 'unconfirmed') : ''}
+            </div>}
+            {entity.attributes && Object.keys(entity.attributes).length > 0
+              ? <pre className="mt-2 max-h-40 overflow-auto whitespace-pre-wrap text-[#34342f]">{JSON.stringify(entity.attributes, null, 2)}</pre>
+              : <p className="mt-2 text-[#5b5953]">No additional metadata has been recorded.</p>}
+          </div>;
+        })()}
       </section>
 
-      <section className="rounded-lg border border-neutral-800 bg-neutral-900 p-4">
+      <section className="rounded-lg border border-[#c9c4b9] bg-[#faf8f2] p-4">
         <h3 className="mb-3 text-sm font-semibold">Relationships</h3>
         {Array.from(grouped.entries()).map(([pred, list]) => (
           <div key={pred} className="mb-4">
-            <p className="mb-1 font-mono text-xs uppercase tracking-wider text-neutral-500">
+            <p className="mb-1 font-mono text-xs uppercase tracking-wider text-[#5b5953]">
               {pred}
             </p>
             {list.map((r) => (
               <div key={r.id}
-                className="mb-1 flex items-center justify-between rounded bg-neutral-950 px-3 py-1.5 text-sm">
+                className="mb-1 flex items-center justify-between rounded bg-[#f4f1e9] px-3 py-1.5 text-sm">
                 <span>
                   {nameOf(r.subject)}
-                  <span className="mx-1 text-neutral-500">—{pred}→</span>
+                  <span className="mx-1 text-[#5b5953]">—{pred}→</span>
                   {nameOf(r.object)}
                 </span>
-                <span className="flex items-center gap-2 text-xs text-neutral-500">
+                <span className="flex items-center gap-2 text-xs text-[#5b5953]">
                   {Math.round(r.confidence * 100)}%
-                  {r.valid_until && <span className="text-neutral-600">ended</span>}
+                  {r.valid_until && <span className="text-[#5b5953]">ended</span>}
                   <button onClick={() => endRel(r.id)} title="end relationship"
-                    className="text-neutral-600 hover:text-red-400">
+                    className="text-[#5b5953] hover:text-red-400">
                     <Trash2 className="h-3.5 w-3.5" />
                   </button>
                 </span>
@@ -130,7 +148,7 @@ export function EntityExplorer({ snapshot }: { snapshot: CtxSnapshot | null }) {
           </div>
         ))}
         {grouped.size === 0 && (
-          <p className="text-xs text-neutral-500">
+          <p className="text-xs text-[#5b5953]">
             No relationships — wearable enrollment and space assignment
             create them automatically.</p>)}
       </section>

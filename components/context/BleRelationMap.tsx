@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Loader2 } from 'lucide-react';
-import { contextApi, type CtxEvidence } from '@/lib/context-api';
+import { contextApi, type CtxEvidence } from '../../lib/context-api';
 
 interface Edge {
   observer: string;
@@ -102,12 +102,12 @@ export function BleRelationMap() {
   }, [edges]);
 
   if (loading) return (
-    <div className="flex items-center gap-2 py-16 text-neutral-400">
+    <div className="flex items-center gap-2 py-16 text-[#5b5953]">
       <Loader2 className="h-4 w-4 animate-spin" /> Reading BLE evidence…
     </div>);
   if (error) return <p className="text-sm text-red-400">{error}</p>;
   if (edges.length === 0) return (
-    <p className="py-12 text-center text-sm text-neutral-500">
+    <p className="py-12 text-center text-sm text-[#5b5953]">
       No BLE proximity evidence yet — enable the BLE source in the mobile
       app (enrolled + unknown advertisers) or wait for node-side BLE
       scanning to report edges.</p>);
@@ -116,7 +116,7 @@ export function BleRelationMap() {
   return (
     <div className="grid grid-cols-1 gap-4 xl:grid-cols-[1fr_320px]">
       <svg viewBox={`0 0 ${W} ${H}`}
-        className="w-full rounded-lg border border-neutral-800 bg-neutral-950">
+        className="w-full rounded-lg border border-[#c9c4b9] bg-[#f4f1e9]">
         {edges.map((e, i) => {
           const a = layout.pos.get(`o:${e.observer}`)!;
           const b = layout.pos.get(`t:${e.target}`)!;
@@ -142,7 +142,7 @@ export function BleRelationMap() {
             <g key={o}>
               <circle cx={p.x} cy={p.y} r={16} fill="#3b82f6" />
               <text x={p.x} y={p.y - 24} fontSize={11} textAnchor="middle"
-                className="fill-neutral-300">{o.split(':').pop()}</text>
+                className="fill-[#34342f]">{o.split(':').pop()}</text>
               <text x={p.x} y={p.y + 4} fontSize={10} textAnchor="middle"
                 className="fill-white">◉</text>
             </g>
@@ -154,7 +154,7 @@ export function BleRelationMap() {
             <g key={t}>
               <circle cx={p.x} cy={p.y} r={16} fill="#14b8a6" />
               <text x={p.x} y={p.y - 24} fontSize={11} textAnchor="middle"
-                className="fill-neutral-300">{t.split(':').pop()}</text>
+                className="fill-[#34342f]">{t.split(':').pop()}</text>
               <text x={p.x} y={p.y + 4} fontSize={10} textAnchor="middle"
                 className="fill-white">◌</text>
             </g>
@@ -177,12 +177,12 @@ export function BleRelationMap() {
           );
         })}
       </svg>
-      <div className="rounded-lg border border-neutral-800 bg-neutral-900 p-3 text-xs">
-        <p className="mb-2 font-medium text-neutral-300">
+      <div className="rounded-lg border border-[#c9c4b9] bg-[#faf8f2] p-3 text-xs">
+        <p className="mb-2 font-medium text-[#34342f]">
           width = RSSI · fade = age · dashed = unenrolled device
         </p>
         {edges.map((e, i) => (
-          <div key={i} className="mb-1 flex justify-between text-neutral-400">
+          <div key={i} className="mb-1 flex justify-between text-[#5b5953]">
             <span className="font-mono">
               {e.observer.split(':').pop()} → {e.target.split(':').pop()?.slice(0, 12)}
             </span>

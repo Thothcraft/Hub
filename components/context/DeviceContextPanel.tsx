@@ -2,8 +2,8 @@
 
 import { useCallback, useEffect, useState } from 'react';
 import { Loader2 } from 'lucide-react';
-import { brainJson, nodeGet } from '@/lib/node-api';
-import { contextApi, type CtxRelationship, type CtxState } from '@/lib/context-api';
+import { brainJson, nodeGet } from '../../lib/node-api';
+import { contextApi, type CtxRelationship, type CtxState } from '../../lib/context-api';
 
 interface Prediction {
   model_id?: string;

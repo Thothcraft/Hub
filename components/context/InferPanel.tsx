@@ -14,14 +14,14 @@ import {
 } from 'lucide-react';
 import {
   inferApi, type InferLast, type InferOptions, type InferResult,
-} from '@/lib/context-api';
+} from '../../lib/context-api';
 
 const fmtTs = (ts?: number) =>
   ts ? new Date(ts * 1000).toLocaleString() : '—';
 
 function Json({ v }: { v: unknown }) {
   return (
-    <pre className="max-h-72 overflow-auto rounded bg-neutral-950 p-2 text-[11px] leading-relaxed text-neutral-300">
+    <pre className="max-h-72 overflow-auto rounded bg-[#f4f1e9] p-2 text-[11px] leading-relaxed text-[#34342f]">
       {JSON.stringify(v, null, 2)}
     </pre>
   );
@@ -33,18 +33,18 @@ function Section({ title, count, children, defaultOpen = false }: {
 }) {
   const [open, setOpen] = useState(defaultOpen);
   return (
-    <div className="rounded border border-neutral-800">
+    <div className="rounded border border-[#c9c4b9]">
       <button onClick={() => setOpen(!open)}
-        className="flex w-full items-center justify-between px-2.5 py-1.5 text-left text-xs hover:bg-neutral-800/60">
+        className="flex w-full items-center justify-between px-2.5 py-1.5 text-left text-xs hover:bg-[#ece8de]/60">
         <span className="flex items-center gap-1.5">
           {open ? <ChevronDown className="h-3 w-3" />
                  : <ChevronRight className="h-3 w-3" />}
-          <span className="font-mono text-neutral-300">{title}</span>
+          <span className="font-mono text-[#34342f]">{title}</span>
         </span>
         {count !== undefined &&
-          <span className="text-neutral-500">{count}</span>}
+          <span className="text-[#5b5953]">{count}</span>}
       </button>
-      {open && <div className="border-t border-neutral-800 p-2">{children}</div>}
+      {open && <div className="border-t border-[#c9c4b9] p-2">{children}</div>}
     </div>
   );
 }
@@ -54,7 +54,7 @@ function SeenPane({ seen }: { seen: Record<string, any> }) {
   if (!seen || typeof seen !== 'object') return null;
   if (seen._truncated) {
     return (
-      <p className="text-xs text-neutral-400">
+      <p className="text-xs text-[#5b5953]">
         Payload was {(seen.bytes / 1024).toFixed(0)} KB — too large to echo.
         Section sizes: <Json v={seen.sections} />
       </p>
@@ -72,7 +72,7 @@ function SeenPane({ seen }: { seen: Record<string, any> }) {
 
   return (
     <div className="space-y-1.5">
-      <p className="text-[11px] text-neutral-500">
+      <p className="text-[11px] text-[#5b5953]">
         {devices.length} registered device{devices.length === 1 ? '' : 's'}
         {' · '}{scenes.length} node scene{scenes.length === 1 ? '' : 's'}
         {' · '}{sensorCount} sensors
@@ -85,9 +85,9 @@ function SeenPane({ seen }: { seen: Record<string, any> }) {
           <div className="space-y-1">
             {devices.map((d: any, i: number) => (
               <div key={i} className="flex flex-wrap items-baseline gap-x-2 text-xs">
-                <span className="text-neutral-200">{d.name || d.uuid || d.entity}</span>
-                <span className="text-neutral-500">{d.type}</span>
-                {d.mac && <span className="font-mono text-neutral-500">{d.mac}</span>}
+                <span className="text-[#11110f]">{d.name || d.uuid || d.entity}</span>
+                <span className="text-[#5b5953]">{d.type}</span>
+                {d.mac && <span className="font-mono text-[#5b5953]">{d.mac}</span>}
                 {d.association &&
                   <span className={`rounded px-1 text-[10px] ${
                     d.association === 'registered'
@@ -96,7 +96,7 @@ function SeenPane({ seen }: { seen: Record<string, any> }) {
                     {d.association}
                   </span>}
                 {d.online === false &&
-                  <span className="text-neutral-600">offline</span>}
+                  <span className="text-[#5b5953]">offline</span>}
               </div>
             ))}
           </div>
@@ -140,16 +140,16 @@ function ProducedPane({ result }: { result: InferResult }) {
   return (
     <div className="space-y-3">
       <div>
-        <p className="text-sm font-medium text-neutral-100">
+        <p className="text-sm font-medium text-[#11110f]">
           {result.summary || '—'}
         </p>
         {result.analysis && (
-          <p className="mt-1.5 whitespace-pre-wrap text-xs leading-relaxed text-neutral-300">
+          <p className="mt-1.5 whitespace-pre-wrap text-xs leading-relaxed text-[#34342f]">
             {result.analysis}
           </p>
         )}
         {result.model_text && (
-          <p className="mt-1 whitespace-pre-wrap text-xs italic text-neutral-400">
+          <p className="mt-1 whitespace-pre-wrap text-xs italic text-[#5b5953]">
             {result.model_text}
           </p>
         )}
@@ -157,16 +157,16 @@ function ProducedPane({ result }: { result: InferResult }) {
 
       {states.length > 0 && (
         <div>
-          <h4 className="mb-1 text-xs font-semibold text-neutral-400">States</h4>
+          <h4 className="mb-1 text-xs font-semibold text-[#5b5953]">States</h4>
           {states.map((s, i) => (
             <div key={i} className="mb-1 flex items-baseline justify-between text-xs">
-              <span className="font-mono text-neutral-300">
+              <span className="font-mono text-[#34342f]">
                 {s.entity_id ? `${s.entity_id} · ` : ''}{s.key}
               </span>
               <span>
                 {typeof s.value === 'object' ? JSON.stringify(s.value) : String(s.value)}
                 {s.confidence != null &&
-                  <span className="ml-2 text-neutral-500">
+                  <span className="ml-2 text-[#5b5953]">
                     {Math.round(s.confidence * 100)}%
                   </span>}
               </span>
@@ -177,24 +177,24 @@ function ProducedPane({ result }: { result: InferResult }) {
 
       {deviceUpdates.length > 0 && (
         <div>
-          <h4 className="mb-1 text-xs font-semibold text-neutral-400">
+          <h4 className="mb-1 text-xs font-semibold text-[#5b5953]">
             Device naming proposals
           </h4>
           {deviceUpdates.map((d, i) => {
             const landed = applied?.find(
               (a) => a.ref === d.device || a.entity === d.device);
             return (
-              <div key={i} className="mb-1.5 rounded border border-neutral-800 px-2 py-1.5 text-xs">
+              <div key={i} className="mb-1.5 rounded border border-[#c9c4b9] px-2 py-1.5 text-xs">
                 <div className="flex items-baseline justify-between">
-                  <span className="text-neutral-200">{d.proposed_name}</span>
-                  <span className="font-mono text-neutral-500">
+                  <span className="text-[#11110f]">{d.proposed_name}</span>
+                  <span className="font-mono text-[#5b5953]">
                     {d.device}
                     {d.confidence != null &&
                       ` · ${Math.round(d.confidence * 100)}%`}
                   </span>
                 </div>
                 {d.rationale &&
-                  <p className="mt-0.5 text-neutral-500">{d.rationale}</p>}
+                  <p className="mt-0.5 text-[#5b5953]">{d.rationale}</p>}
                 {landed &&
                   <p className="mt-0.5 text-green-400">→ {landed.entity}</p>}
               </div>
@@ -275,53 +275,53 @@ export function InferPanel() {
   return (
     <div className="space-y-4">
       {/* controls */}
-      <div className="flex flex-wrap items-end gap-3 rounded-lg border border-neutral-800 bg-neutral-900 p-3">
+      <div className="flex flex-wrap items-end gap-3 rounded-lg border border-[#c9c4b9] bg-[#faf8f2] p-3">
         <label className="text-xs">
-          <span className="mb-1 block text-neutral-500">Thinking tier</span>
+          <span className="mb-1 block text-[#5b5953]">Thinking tier</span>
           <select value={tier} onChange={(e) => setTier(e.target.value)}
-            className="rounded border border-neutral-700 bg-neutral-950 px-2 py-1.5 text-xs">
+            className="rounded border border-[#c9c4b9] bg-[#f4f1e9] px-2 py-1.5 text-xs">
             {(options?.tiers ?? ['quick', 'standard', 'deep']).map((t) => (
               <option key={t} value={t}>{t}</option>))}
           </select>
         </label>
         <label className="text-xs">
-          <span className="mb-1 block text-neutral-500">
+          <span className="mb-1 block text-[#5b5953]">
             Model (user set — gpt-4o or better)
           </span>
           <select value={model} onChange={(e) => setModel(e.target.value)}
-            className="rounded border border-neutral-700 bg-neutral-950 px-2 py-1.5 text-xs">
+            className="rounded border border-[#c9c4b9] bg-[#f4f1e9] px-2 py-1.5 text-xs">
             <option value="">tier default ({effectiveModel || '…'})</option>
             {(options?.models ?? []).map((m) => (
               <option key={m} value={m}>{m}</option>))}
           </select>
         </label>
         <label className="text-xs">
-          <span className="mb-1 block text-neutral-500">
+          <span className="mb-1 block text-[#5b5953]">
             Sensor window (s) — radar/radio/scene bundle
           </span>
           <input type="number" min={0} max={86400} value={gatherS}
             onChange={(e) => setGatherS(Number(e.target.value) || 0)}
-            className="w-24 rounded border border-neutral-700 bg-neutral-950 px-2 py-1.5 text-xs" />
+            className="w-24 rounded border border-[#c9c4b9] bg-[#f4f1e9] px-2 py-1.5 text-xs" />
         </label>
         <label className="text-xs">
-          <span className="mb-1 block text-neutral-500">Entity hint</span>
+          <span className="mb-1 block text-[#5b5953]">Entity hint</span>
           <input value={hint} onChange={(e) => setHint(e.target.value)}
             placeholder="person:gad" size={14}
-            className="rounded border border-neutral-700 bg-neutral-950 px-2 py-1.5 text-xs" />
+            className="rounded border border-[#c9c4b9] bg-[#f4f1e9] px-2 py-1.5 text-xs" />
         </label>
-        <label className="flex items-center gap-1.5 pb-1.5 text-xs text-neutral-400">
+        <label className="flex items-center gap-1.5 pb-1.5 text-xs text-[#5b5953]">
           <input type="checkbox" checked={dryRun}
             onChange={(e) => setDryRun(e.target.checked)} />
           dry run
         </label>
         <button onClick={run} disabled={busy}
-          className="inline-flex items-center gap-2 rounded bg-blue-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-blue-500 disabled:opacity-50">
+          className="inline-flex items-center gap-2 rounded bg-[#11110f] px-3 py-1.5 text-xs font-medium text-white hover:bg-[#6b7f4a] disabled:opacity-50">
           {busy ? <Loader2 className="h-3.5 w-3.5 animate-spin" />
                  : <Play className="h-3.5 w-3.5" />}
           Infer now
         </button>
         {result?.model_id &&
-          <span className="pb-1.5 text-[11px] text-neutral-500">
+          <span className="pb-1.5 text-[11px] text-[#5b5953]">
             ran {result.model_id}
             {result.generated_at ? ` · ${fmtTs(result.generated_at)}` : ''}
             {result.dry_run ? ' · dry' : ''}
@@ -332,7 +332,7 @@ export function InferPanel() {
         <p className="rounded bg-red-950/40 px-3 py-2 text-sm text-red-300">{error}</p>}
 
       {!result ? (
-        <div className="flex items-center gap-2 py-16 text-neutral-400">
+        <div className="flex items-center gap-2 py-16 text-[#5b5953]">
           <BrainCircuit className="h-4 w-4" />
           <span className="text-sm">
             Run an inference — the model sees the full sensor bundle and
@@ -341,16 +341,16 @@ export function InferPanel() {
         </div>
       ) : (
         <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">
-          <section className="rounded-lg border border-neutral-800 bg-neutral-900 p-3">
+          <section className="rounded-lg border border-[#c9c4b9] bg-[#faf8f2] p-3">
             <h3 className="mb-2 flex items-center gap-1.5 text-sm font-semibold">
-              <ScanEye className="h-4 w-4 text-blue-400" />
+              <ScanEye className="h-4 w-4 text-[#344323]" />
               What the model saw
             </h3>
             {result.seen
               ? <SeenPane seen={result.seen} />
-              : <p className="text-xs text-neutral-500">No payload echo.</p>}
+              : <p className="text-xs text-[#5b5953]">No payload echo.</p>}
           </section>
-          <section className="rounded-lg border border-neutral-800 bg-neutral-900 p-3">
+          <section className="rounded-lg border border-[#c9c4b9] bg-[#faf8f2] p-3">
             <h3 className="mb-2 flex items-center gap-1.5 text-sm font-semibold">
               <Eye className="h-4 w-4 text-green-400" />
               What the model produced
@@ -360,7 +360,7 @@ export function InferPanel() {
         </div>
       )}
       {last && !result &&
-        <p className="text-[11px] text-neutral-600">
+        <p className="text-[11px] text-[#5b5953]">
           Last run {fmtTs(last.at)} · {last.model_id}
         </p>}
     </div>

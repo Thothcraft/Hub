@@ -1,8 +1,8 @@
 'use client';
 
-import { useMemo } from 'react';
-import { Canvas } from '@react-three/fiber';
-import { Line, OrbitControls } from '@react-three/drei';
+import { useMemo, useRef } from 'react';
+import { Canvas, useFrame } from '@react-three/fiber';
+import { Html, Line, OrbitControls } from '@react-three/drei';
 import * as THREE from 'three';
 import type { RoomDoc, V3 } from '@/lib/node-api';
 
@@ -42,6 +42,34 @@ export interface RadarFrame {
   energy?: number;
   xy_map?: number[][];
   range_profile?: number[];
+}
+
+export interface RoomPerson {
+  id: string;
+  name: string;
+  wearingWatch?: boolean | null;
+}
+
+function PersonMarker({ person, index }: { person: RoomPerson; index: number }) {
+  const marker = useRef<THREE.Group>(null);
+  useFrame(({ clock }) => {
+    if (marker.current) marker.current.scale.setScalar(1 + 0.035 * Math.sin(clock.elapsedTime * 2.4));
+  });
+  return (
+    <group ref={marker} position={[(index % 3 - 1) * 0.42, 0.9, Math.floor(index / 3) * 0.42]}>
+      <mesh>
+        <capsuleGeometry args={[0.16, 0.42, 5, 10]} />
+        <meshStandardMaterial color="#6b7f4a" emissive="#344323" emissiveIntensity={0.35} />
+      </mesh>
+      <mesh position={[0, 0.34, 0]}>
+        <sphereGeometry args={[0.13, 16, 12]} />
+        <meshStandardMaterial color="#d8b28c" />
+      </mesh>
+      <Html position={[0, 0.62, 0]} center distanceFactor={9}>
+        <span className="whitespace-nowrap rounded-full border border-white/70 bg-[#20231b]/90 px-2 py-1 text-[10px] font-medium text-white shadow">{person.name}{person.wearingWatch === true ? ' · watch worn' : person.wearingWatch === false ? ' · watch off' : ''}</span>
+      </Html>
+    </group>
+  );
 }
 
 function asRad(v: number | undefined): number {
@@ -320,6 +348,7 @@ export default function RoomScene({
   selectedSensor,
   onSelectSensor,
   radarFrames,
+  people = [],
   className,
 }: {
   room: RoomDoc | null;
@@ -327,6 +356,9 @@ export default function RoomScene({
   onSelectSensor?: (deviceId: string, sensorType: string) => void;
   /** device_id → latest radar frame payload (xy_map/snr_db/energy) */
   radarFrames?: Record<string, RadarFrame | null>;
+  /** People with an active located_in relation to this room. Their marker
+   * is room-level only; it is illustrative because no exact person coordinate exists. */
+  people?: RoomPerson[];
   className?: string;
 }) {
   const dims = room?.dims ?? { w: 6, d: 4, h: 2.6 };
@@ -399,6 +431,7 @@ export default function RoomScene({
             radarFrame={radarFrames?.[dev.device_id] ?? null}
           />
         ))}
+        {people.map((person, index) => <PersonMarker key={person.id} person={person} index={index} />)}
         {csiLinks.map(([a, b], i) => (
           <Line
             key={`csi${i}`}

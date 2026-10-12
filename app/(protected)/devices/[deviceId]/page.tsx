@@ -37,6 +37,8 @@ import {
   StatusTab,
 } from '@/components/device/tabs';
 import { LayoutTab } from '@/components/device/LayoutTab';
+import { contextApi, type CtxSnapshot } from '@/lib/context-api';
+import type { RoomPerson } from '@/components/device/RoomScene';
 
 const RoomScene = dynamic(() => import('@/components/device/RoomScene'), {
   ssr: false,
@@ -49,6 +51,34 @@ const RoomScene = dynamic(() => import('@/components/device/RoomScene'), {
 
 type TabId = 'status' | 'live' | 'layout' | 'captures' | 'models' | 'automations' | 'context';
 type DeviceRegistryInfo = { device_uuid: string; device_name?: string; device_type?: string; hardware_info?: Record<string, unknown>; last_seen?: string; };
+
+function roomPeople(snapshot: CtxSnapshot, doc: RoomDoc, roomId: string): RoomPerson[] {
+  const roomName = roomOptions(doc).find((room) => room.room_id === roomId)?.name?.toLocaleLowerCase();
+  const candidates = snapshot.entities.filter((entity) =>
+    ['place', 'space', 'building'].includes(entity.kind));
+  const place = candidates.find((entity) => entity.id === roomId || entity.id === `place:${roomId}`)
+    ?? candidates.find((entity) => entity.attributes?.room_id === roomId)
+    ?? candidates.find((entity) => roomName && entity.name?.toLocaleLowerCase() === roomName);
+  if (!place) return [];
+  const people = snapshot.entities.filter((entity) => entity.kind === 'person'
+    && snapshot.relationships.some((relation) => relation.subject === entity.id
+      && relation.predicate === 'located_in' && relation.object === place.id));
+  const now = Date.now() / 1000;
+  return people.map((person) => {
+    const associated = snapshot.relationships.filter((relation) =>
+      relation.subject === person.id && ['associated_devices', 'carries'].includes(relation.predicate))
+      .map((relation) => relation.object);
+    const attrs = person.attributes?.associated_devices;
+    if (Array.isArray(attrs)) associated.push(...attrs.map(String));
+    const worn = snapshot.states.find((state) =>
+      state.key === 'watch.worn.v1' && associated.includes(state.entity_id)
+      && state.since != null && now - state.since <= 120);
+    const wornValue = typeof worn?.value === 'object' && worn.value !== null
+      ? (worn.value as Record<string, unknown>).worn : worn?.value;
+    return { id: person.id, name: person.name || person.id,
+      wearingWatch: typeof wornValue === 'boolean' ? wornValue : null };
+  });
+}
 
 const TABS: Array<{ id: TabId; label: string; icon: typeof Radio }> = [
   { id: 'status', label: 'Status', icon: Radio },
@@ -80,6 +110,7 @@ export default function DeviceDashboardPage() {
   const [err, setErr] = useState('');
   const [selectedSensor, setSelectedSensor] = useState<string | null>(null);
   const [registryInfo, setRegistryInfo] = useState<DeviceRegistryInfo | null>(null);
+  const [roomPeopleNow, setRoomPeopleNow] = useState<RoomPerson[]>([]);
 
   const loadBasics = useCallback(async () => {
     void get('/device/list?include_offline=true').then((res) => {
@@ -133,6 +164,20 @@ export default function DeviceDashboardPage() {
     const t = setInterval(loadBasics, 10000);
     return () => clearInterval(t);
   }, [loadBasics]);
+
+  useEffect(() => {
+    if (!room) { setRoomPeopleNow([]); return; }
+    let live = true;
+    contextApi.snapshot().then((snapshot) => {
+      if (live) setRoomPeopleNow(roomPeople(snapshot, room, selRoom || room.room_id || ''));
+    }).catch(() => { if (live) setRoomPeopleNow([]); });
+    const timer = window.setInterval(() => {
+      contextApi.snapshot().then((snapshot) => {
+        if (live) setRoomPeopleNow(roomPeople(snapshot, room, selRoom || room.room_id || ''));
+      }).catch(() => {});
+    }, 10000);
+    return () => { live = false; window.clearInterval(timer); };
+  }, [room, selRoom]);
 
   // Event stream → toasts (poll Brain /v1/events; mobile polls the same).
   const lastEventId = useRef(0);
@@ -287,7 +332,7 @@ export default function DeviceDashboardPage() {
                 Room layout {room?.name ? `— ${room.name}` : ''}
               </h3>
               <span className="text-xs text-slate-500">
-                {room ? 'cached room/v1 doc' : 'awaiting first room_changed push'}
+                {room ? `room/v1 · ${roomPeopleNow.length ? `${roomPeopleNow.length} person placement${roomPeopleNow.length === 1 ? '' : 's'}` : 'no person placement'}${roomPeopleNow.length ? ' · marker positions illustrative' : ' · occupancy unknown'}` : 'awaiting first room_changed push'}
               </span>
             </div>
             {room && roomOptions(room).length > 1 && (
@@ -311,6 +356,7 @@ export default function DeviceDashboardPage() {
               room={room ? roomView(room, selRoom || (room.room_id ?? '')) : room}
               selectedSensor={selectedSensor}
               radarFrames={radarFrames}
+              people={roomPeopleNow}
               onSelectSensor={(dev, type) =>
                 setSelectedSensor((cur) =>
                   cur === `${dev}:${type}:0` ? null : `${dev}:${type}:0`)}

@@ -47,6 +47,23 @@ function tokenIsExpired(token: string): boolean {
   return Number.isFinite(expires) && expires * 1000 <= Date.now();
 }
 
+async function fetchProfile(token?: string): Promise<Response> {
+  const controller = new AbortController();
+  const timeout = window.setTimeout(() => controller.abort(), 10000);
+  try {
+    return await fetch('/api/proxy/profile', {
+      headers: {
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        Accept: 'application/json',
+      },
+      cache: 'no-store',
+      signal: controller.signal,
+    });
+  } finally {
+    window.clearTimeout(timeout);
+  }
+}
+
 // "Remember this device" unchecked → credentials live in sessionStorage and
 // die with the browser tab; checked → localStorage across restarts.
 // auth_persist records which store the active session uses.
@@ -112,10 +129,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         clearStoredAuth();
       } else {
         try {
-          const response = await fetch('/api/proxy/profile', {
-            headers: { Authorization: `Bearer ${token}`, Accept: 'application/json' },
-            cache: 'no-store',
-          });
+          const response = await fetchProfile(token);
           if (!response.ok) throw new Error(`Stored session rejected (${response.status})`);
           const profile = await response.json();
           const stored = userStr ? JSON.parse(userStr) : {};
@@ -137,10 +151,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         }
       }
       try {
-        const response = await fetch('/api/proxy/profile', {
-          headers: { Accept: 'application/json' },
-          cache: 'no-store',
-        });
+        const response = await fetchProfile();
         if (!response.ok) throw new Error('No valid session');
         const profile = await response.json();
         const restored = {

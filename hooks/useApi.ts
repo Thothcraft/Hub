@@ -23,6 +23,16 @@ function storedToken(): string | null {
   return localStorage.getItem('auth_token') || sessionStorage.getItem('auth_token');
 }
 
+async function fetchWithTimeout(url: string, init: RequestInit): Promise<Response> {
+  const controller = new AbortController();
+  const timeout = window.setTimeout(() => controller.abort(), 20000);
+  try {
+    return await fetch(url, { ...init, signal: controller.signal });
+  } finally {
+    window.clearTimeout(timeout);
+  }
+}
+
 export const useApi = () => {
   const { user } = useAuth();
   const apiBaseUrl = '/api/proxy';
@@ -79,7 +89,7 @@ export const useApi = () => {
   const get = useCallback(async (url: string) => {
     const hasQuery = url.includes('?');
     const cacheBustedUrl = `${url}${hasQuery ? '&' : '?'}_ts=${Date.now()}`;
-    const response = await fetch(`${apiBaseUrl}${cacheBustedUrl}`, {
+    const response = await fetchWithTimeout(`${apiBaseUrl}${cacheBustedUrl}`, {
       method: 'GET',
       headers: getAuthHeaders(),
       cache: 'no-store',
@@ -89,7 +99,7 @@ export const useApi = () => {
   }, [apiBaseUrl, getAuthHeaders, handleResponse]);
 
   const post = useCallback(async (url: string, data: any) => {
-    const response = await fetch(`${apiBaseUrl}${url}`, {
+    const response = await fetchWithTimeout(`${apiBaseUrl}${url}`, {
       method: 'POST',
       headers: getAuthHeaders(),
       body: JSON.stringify(data),
@@ -99,7 +109,7 @@ export const useApi = () => {
   }, [apiBaseUrl, getAuthHeaders, handleResponse]);
 
   const put = useCallback(async (url: string, data: any) => {
-    const response = await fetch(`${apiBaseUrl}${url}`, {
+    const response = await fetchWithTimeout(`${apiBaseUrl}${url}`, {
       method: 'PUT',
       headers: getAuthHeaders(),
       body: JSON.stringify(data),
@@ -109,7 +119,7 @@ export const useApi = () => {
   }, [apiBaseUrl, getAuthHeaders, handleResponse]);
 
   const del = useCallback(async (url: string) => {
-    const response = await fetch(`${apiBaseUrl}${url}`, {
+    const response = await fetchWithTimeout(`${apiBaseUrl}${url}`, {
       method: 'DELETE',
       headers: getAuthHeaders(),
     });

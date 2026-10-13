@@ -102,7 +102,7 @@ export default function DevicesPage() {
   const toast = useToast();
 
   const loadData = useCallback(async (showLoading = false) => {
-    if (authLoading || !user?.token || loadInFlight.current) return;
+    if (authLoading || !user || loadInFlight.current) return;
     loadInFlight.current = true;
     if (showLoading) setLoading(true);
     try {
@@ -124,7 +124,7 @@ export default function DevicesPage() {
       loadInFlight.current = false;
       setLoading(false);
     }
-  }, [authLoading, get, toast, user?.token]);
+  }, [authLoading, get, toast, user]);
 
   // Brain's collection flag lags — probe online nodes through the WS relay
   // for the node's own capture state, model count and sensor inventory.
@@ -162,17 +162,17 @@ export default function DevicesPage() {
   // Continuous-collection devices surface here the second a minute opens —
   // catches collectors whose Brain flag is stale, without relay calls.
   const loadLive = useCallback(async () => {
-    if (authLoading || !user?.token) return;
+    if (authLoading || !user) return;
     const res = await get('/device/live-seconds').catch(() => null);
     if (!res?.success) return;
     setLiveMinutes(new Set(
       Object.entries(res.devices || {})
         .filter(([, v]) => Boolean((v as { minute?: string })?.minute))
         .map(([id]) => id)));
-  }, [authLoading, get, user?.token]);
+  }, [authLoading, get, user]);
 
   useEffect(() => {
-    if (authLoading || !user?.token) return;
+    if (authLoading || !user) return;
     const refresh = () => {
       if (document.visibilityState === 'visible') {
         loadData(false);
@@ -183,7 +183,7 @@ export default function DevicesPage() {
     loadLive();
     const timer = window.setInterval(refresh, 8000);
     return () => window.clearInterval(timer);
-  }, [authLoading, loadData, loadLive, user?.token]);
+  }, [authLoading, loadData, loadLive, user]);
 
   useEffect(() => {
     if (!devices.length) return;

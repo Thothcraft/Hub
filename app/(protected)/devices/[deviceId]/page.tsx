@@ -53,30 +53,38 @@ type TabId = 'status' | 'live' | 'layout' | 'captures' | 'models' | 'automations
 type DeviceRegistryInfo = { device_uuid: string; device_name?: string; device_type?: string; hardware_info?: Record<string, unknown>; last_seen?: string; };
 
 function roomPeople(snapshot: CtxSnapshot, doc: RoomDoc, roomId: string): RoomPerson[] {
-  const roomName = roomOptions(doc).find((room) => room.room_id === roomId)?.name?.toLocaleLowerCase();
   const candidates = snapshot.entities.filter((entity) =>
     ['place', 'space', 'building'].includes(entity.kind));
   const place = candidates.find((entity) => entity.id === roomId || entity.id === `place:${roomId}`)
-    ?? candidates.find((entity) => entity.attributes?.room_id === roomId)
-    ?? candidates.find((entity) => roomName && entity.name?.toLocaleLowerCase() === roomName);
+    ?? candidates.find((entity) => entity.attributes?.room_id === roomId);
   if (!place) return [];
-  const people = snapshot.entities.filter((entity) => entity.kind === 'person'
-    && snapshot.relationships.some((relation) => relation.subject === entity.id
-      && relation.predicate === 'located_in' && relation.object === place.id));
   const now = Date.now() / 1000;
+  const currentLocationEdges = snapshot.relationships.filter((relation) =>
+    relation.predicate === 'located_in' && relation.object === place.id
+    && relation.valid_from != null && now - relation.valid_from <= 120
+    && relation.valid_from <= now + 5 && (relation.valid_until == null || relation.valid_until > now)
+    && relation.confidence >= 0.8);
+  const people = snapshot.entities.filter((entity) => entity.kind === 'person'
+    && currentLocationEdges.some((relation) => relation.subject === entity.id));
   return people.map((person) => {
     const associated = snapshot.relationships.filter((relation) =>
-      relation.subject === person.id && ['associated_devices', 'carries'].includes(relation.predicate))
+      relation.subject === person.id && ['associated_devices', 'carries'].includes(relation.predicate)
+      && relation.valid_from != null && now - relation.valid_from <= 120
+      && relation.valid_from <= now + 5 && (relation.valid_until == null || relation.valid_until > now)
+      && relation.confidence >= 0.8)
       .map((relation) => relation.object);
     const attrs = person.attributes?.associated_devices;
     if (Array.isArray(attrs)) associated.push(...attrs.map(String));
     const worn = snapshot.states.find((state) =>
       state.key === 'watch.worn.v1' && associated.includes(state.entity_id)
-      && state.since != null && now - state.since <= 120);
+      && state.since != null && now - state.since <= 120
+      && state.since <= now + 5 && (state.valid_until == null || state.valid_until > now)
+      && state.confidence >= 0.8);
     const wornValue = typeof worn?.value === 'object' && worn.value !== null
       ? (worn.value as Record<string, unknown>).worn : worn?.value;
     return { id: person.id, name: person.name || person.id,
-      wearingWatch: typeof wornValue === 'boolean' ? wornValue : null };
+      wearingWatch: typeof wornValue === 'boolean' ? wornValue : null,
+      live: true };
   });
 }
 

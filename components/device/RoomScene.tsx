@@ -48,15 +48,19 @@ export interface RoomPerson {
   id: string;
   name: string;
   wearingWatch?: boolean | null;
+  pos?: V3;
+  live?: boolean;
 }
 
 function PersonMarker({ person, index }: { person: RoomPerson; index: number }) {
   const marker = useRef<THREE.Group>(null);
   useFrame(({ clock }) => {
-    if (marker.current) marker.current.scale.setScalar(1 + 0.035 * Math.sin(clock.elapsedTime * 2.4));
+    if (marker.current) marker.current.scale.setScalar(
+      person.live ? 1 + 0.035 * Math.sin(clock.elapsedTime * 2.4) : 1,
+    );
   });
   return (
-    <group ref={marker} position={[(index % 3 - 1) * 0.42, 0.9, Math.floor(index / 3) * 0.42]}>
+    <group ref={marker} position={person.pos ?? [(index % 3 - 1) * 0.42, 0, Math.floor(index / 3) * 0.42]}>
       <mesh>
         <capsuleGeometry args={[0.16, 0.42, 5, 10]} />
         <meshStandardMaterial color="#6b7f4a" emissive="#344323" emissiveIntensity={0.35} />
@@ -66,7 +70,7 @@ function PersonMarker({ person, index }: { person: RoomPerson; index: number }) 
         <meshStandardMaterial color="#d8b28c" />
       </mesh>
       <Html position={[0, 0.62, 0]} center distanceFactor={9}>
-        <span className="whitespace-nowrap rounded-full border border-white/70 bg-[#20231b]/90 px-2 py-1 text-[10px] font-medium text-white shadow">{person.name}{person.wearingWatch === true ? ' · watch worn' : person.wearingWatch === false ? ' · watch off' : ''}</span>
+        <span className="whitespace-nowrap rounded-full border border-white/70 bg-[#20231b]/90 px-2 py-1 text-[10px] font-medium text-white shadow">{person.name}{person.live && person.wearingWatch === true ? ' · watch worn' : person.live && person.wearingWatch === false ? ' · watch off' : person.live ? '' : ' · placed'}</span>
       </Html>
     </group>
   );
@@ -339,6 +343,11 @@ function DeviceNode({
           </group>
         );
       })}
+      <Html position={[0, 0.3, 0]} center distanceFactor={9}>
+        <span className="whitespace-nowrap rounded bg-[#20231b]/90 px-2 py-1 text-[10px] text-white shadow">
+          {device.device_name || device.device_id}
+        </span>
+      </Html>
     </group>
   );
 }
@@ -363,6 +372,15 @@ export default function RoomScene({
 }) {
   const dims = room?.dims ?? { w: 6, d: 4, h: 2.6 };
   const wallH = Math.max(0.4, dims.h * OPEN_ROOF_RATIO);
+  const visiblePeople = new Map<string, RoomPerson>();
+  for (const person of room?.persons ?? []) {
+    visiblePeople.set(person.person_id, {
+      id: person.person_id, name: person.name || person.person_id, pos: person.pos,
+    });
+  }
+  for (const person of people) {
+    visiblePeople.set(person.id, { ...visiblePeople.get(person.id), ...person });
+  }
 
   const walls = useMemo(() => {
     if (room?.walls?.length) {
@@ -431,7 +449,7 @@ export default function RoomScene({
             radarFrame={radarFrames?.[dev.device_id] ?? null}
           />
         ))}
-        {people.map((person, index) => <PersonMarker key={person.id} person={person} index={index} />)}
+        {Array.from(visiblePeople.values()).map((person, index) => <PersonMarker key={person.id} person={person} index={index} />)}
         {csiLinks.map(([a, b], i) => (
           <Line
             key={`csi${i}`}

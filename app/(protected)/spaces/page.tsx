@@ -1,8 +1,16 @@
 'use client';
 
 import { useCallback, useEffect, useRef, useState } from 'react';
+import dynamic from 'next/dynamic';
 import { useApi } from '@/hooks/useApi';
 import { useAuth } from '@/contexts/AuthContext';
+import { roomOptions, roomView } from '@/lib/node-api';
+import type { RoomDoc } from '@/lib/node-api';
+import { contextApi } from '@/lib/context-api';
+import type { CtxSnapshot } from '@/lib/context-api';
+import type { RoomPerson } from '@/components/device/RoomScene';
+
+const RoomScene = dynamic(() => import('@/components/device/RoomScene'), { ssr: false });
 
 interface Zone { id: number; name: string; polygon: [number, number][] }
 interface Placement {
@@ -21,6 +29,81 @@ interface SpaceState {
   zones: Record<string, ZoneState>; last_activity: string | null;
 }
 interface DeviceInfo { device_id: string; device_name: string; online: boolean }
+interface SyncedRoom {
+  device_id: string;
+  device_name: string;
+  updated_at?: string | null;
+  room: RoomDoc;
+}
+
+function freshRoomPeople(snapshot: CtxSnapshot | null, room: RoomDoc): RoomPerson[] {
+  if (!snapshot) return [];
+  const roomId = room.room_id || '';
+  const placeIds = new Set(snapshot.entities.filter((entity) =>
+    ['place', 'space', 'building'].includes(entity.kind)
+    && (entity.id === roomId || entity.id === `place:${roomId}`
+      || entity.attributes?.room_id === roomId)).map((entity) => entity.id));
+  if (!placeIds.size) return [];
+  const now = Date.now() / 1000;
+  const currentEdges = snapshot.relationships.filter((relation) =>
+    relation.predicate === 'located_in' && placeIds.has(relation.object)
+    && relation.valid_from != null && now - relation.valid_from <= 120
+    && relation.valid_from <= now + 5
+    && (relation.valid_until == null || relation.valid_until > now)
+    && relation.confidence >= 0.8);
+  const configured = new Map((room.persons ?? []).map((person) => [
+    person.person_id, person,
+  ]));
+  return snapshot.entities.filter((entity) => entity.kind === 'person'
+    && currentEdges.some((relation) => relation.subject === entity.id))
+    .map((person) => {
+      const associations = snapshot.relationships.filter((relation) =>
+        relation.subject === person.id
+        && ['associated_devices', 'carries'].includes(relation.predicate)
+        && relation.valid_from != null && now - relation.valid_from <= 120
+        && relation.valid_from <= now + 5
+        && (relation.valid_until == null || relation.valid_until > now)
+        && relation.confidence >= 0.8).map((relation) => relation.object);
+      const configuredDevices = person.attributes?.associated_devices;
+      if (Array.isArray(configuredDevices))
+        associations.push(...configuredDevices.map(String));
+      const watch = snapshot.states.filter((state) =>
+        state.key === 'watch.worn.v1' && associations.includes(state.entity_id)
+        && state.since != null && now - state.since <= 120
+        && state.since <= now + 5
+        && (state.valid_until == null || state.valid_until > now)
+        && state.confidence >= 0.8)
+        .sort((a, b) => (b.since ?? 0) - (a.since ?? 0))[0];
+      const watchValue = typeof watch?.value === 'object' && watch.value !== null
+        ? (watch.value as Record<string, unknown>).worn : watch?.value;
+      return {
+        id: person.id,
+        name: person.name || person.id,
+        pos: configured.get(person.id)?.pos,
+        wearingWatch: typeof watchValue === 'boolean' ? watchValue : null,
+        live: true,
+      };
+    });
+}
+
+function freshRoomOccupancy(snapshot: CtxSnapshot | null, room: RoomDoc) {
+  if (!snapshot) return null;
+  const deviceIds = new Set((room.devices ?? []).map((device) => device.device_id));
+  const now = Date.now() / 1000;
+  const state = snapshot.states.filter((candidate) =>
+    candidate.key === 'occupancy.v1' && deviceIds.has(candidate.entity_id)
+    && candidate.since != null && now - candidate.since <= 60
+    && candidate.since <= now + 5
+    && (candidate.valid_until == null || candidate.valid_until > now)
+    && candidate.confidence >= 0.8 && candidate.evidence_ids?.length > 0)
+    .sort((a, b) => (b.since ?? 0) - (a.since ?? 0))[0];
+  const value = typeof state?.value === 'object' && state.value !== null
+    ? state.value as Record<string, unknown> : null;
+  return typeof value?.occupied === 'boolean' && state
+    ? { occupied: value.occupied, confidence: state.confidence, since: state.since,
+        stateId: state.id, evidenceCount: state.evidence_ids.length }
+    : null;
+}
 
 const PLAN_W = 10; // meters, default plan extents
 const PLAN_H = 8;
@@ -34,6 +117,10 @@ export default function SpacesPage() {
   const [spaces, setSpaces] = useState<Space[]>([]);
   const [states, setStates] = useState<Record<number, SpaceState>>({});
   const [devices, setDevices] = useState<DeviceInfo[]>([]);
+  const [syncedRooms, setSyncedRooms] = useState<SyncedRoom[]>([]);
+  const [selectedSyncedRoom, setSelectedSyncedRoom] = useState('');
+  const [syncError, setSyncError] = useState<string | null>(null);
+  const [contextSnapshot, setContextSnapshot] = useState<CtxSnapshot | null>(null);
   const [selected, setSelected] = useState<Space | null>(null);
   const [newName, setNewName] = useState('');
   const [mode, setMode] = useState<Mode>('view');
@@ -59,6 +146,16 @@ export default function SpacesPage() {
       for (const s of st.spaces || []) map[s.space_id] = s;
       setStates(map);
       setDevices(dev.devices || dev || []);
+      try {
+        const shared = await get('/v1/rooms');
+        const rows: SyncedRoom[] = shared.rooms || [];
+        setSyncedRooms(rows);
+        setSelectedSyncedRoom((previous) => previous ||
+          (rows[0] ? `${rows[0].device_id}:${rows[0].room?.room_id || ''}` : ''));
+        setSyncError(null);
+      } catch (syncFailure: any) {
+        setSyncError(syncFailure?.message || 'Synchronized room layouts are unavailable');
+      }
       setError(null);
     } catch (e: any) {
       setError(e?.message || 'Failed to load spaces');
@@ -71,6 +168,15 @@ export default function SpacesPage() {
   }, [get]);
 
   useEffect(() => { load(); }, [load]);
+  useEffect(() => {
+    const refresh = async () => {
+      try { setContextSnapshot(await contextApi.snapshot()); }
+      catch { setContextSnapshot(null); }
+    };
+    void refresh();
+    const timer = setInterval(() => { void refresh(); }, 10000);
+    return () => clearInterval(timer);
+  }, []);
   useEffect(() => {
     const t = setInterval(async () => {
       try {
@@ -203,6 +309,47 @@ export default function SpacesPage() {
   const state = selected ? states[selected.id] : null;
   const placedIds = new Set((selected?.devices || []).map((d) => d.device_id));
   const selPl = selected?.devices.find((d) => d.device_id === selPlacement);
+  const syncedGroups = new Map<string, {
+    key: string; deviceName: string; updatedAt?: string | null; room: RoomDoc;
+  }>();
+  for (const source of syncedRooms) {
+    for (const option of roomOptions(source.room)) {
+      const view = roomView(source.room, option.room_id);
+      const buildingKey = source.room.building?.id || source.room.building?.name;
+      const key = `${buildingKey || source.device_id}:${option.room_id}`;
+      const existing = syncedGroups.get(key);
+      if (!existing) {
+        syncedGroups.set(key, { key, deviceName: source.device_name,
+          updatedAt: source.updated_at, room: view });
+        continue;
+      }
+      const latest = !existing.updatedAt || (source.updated_at &&
+        source.updated_at > existing.updatedAt);
+      const base = latest ? view : existing.room;
+      const allDevices = new Map<string, NonNullable<RoomDoc['devices']>[number]>();
+      for (const device of [...(existing.room.devices ?? []), ...(view.devices ?? [])])
+        allDevices.set(device.device_id, device);
+      const allPeople = new Map<string, NonNullable<RoomDoc['persons']>[number]>();
+      for (const person of [...(existing.room.persons ?? []), ...(view.persons ?? [])])
+        allPeople.set(person.person_id, person);
+      const sourceNames = existing.deviceName.split(', ');
+      if (!sourceNames.includes(source.device_name)) sourceNames.push(source.device_name);
+      syncedGroups.set(key, {
+        key,
+        deviceName: sourceNames.join(', '),
+        updatedAt: latest ? source.updated_at : existing.updatedAt,
+        room: { ...base, devices: Array.from(allDevices.values()),
+          persons: Array.from(allPeople.values()) },
+      });
+    }
+  }
+  const syncedRoomViews = Array.from(syncedGroups.values());
+  const activeSyncedRoom = syncedRoomViews.find(
+    (entry) => entry.key === selectedSyncedRoom) ?? syncedRoomViews[0];
+  const liveRoomPeople = activeSyncedRoom
+    ? freshRoomPeople(contextSnapshot, activeSyncedRoom.room) : [];
+  const liveOccupancy = activeSyncedRoom
+    ? freshRoomOccupancy(contextSnapshot, activeSyncedRoom.room) : null;
 
   return (
     <div className="p-6 space-y-6">
@@ -465,6 +612,49 @@ export default function SpacesPage() {
           )}
         </div>
       </div>
+
+      <section className="space-y-3 rounded-xl border border-neutral-700 bg-neutral-900/70 p-4">
+        <div className="flex flex-wrap items-end justify-between gap-3">
+          <div>
+            <h2 className="text-lg font-medium">Synchronized device room layouts</h2>
+            <p className="text-sm text-neutral-400">
+              Read-only views of layouts saved from your node dashboards, including placed devices and people.
+            </p>
+          </div>
+          {syncedRoomViews.length > 0 && (
+            <select aria-label="Synchronized room layout" value={activeSyncedRoom?.key || ''}
+              onChange={(e) => setSelectedSyncedRoom(e.target.value)}
+              className="max-w-full rounded bg-neutral-800 px-3 py-2 text-sm">
+              {syncedRoomViews.map((entry) => (
+                <option key={entry.key} value={entry.key}>
+                  {entry.room.name || 'Room'} · {entry.deviceName}
+                </option>
+              ))}
+            </select>
+          )}
+        </div>
+        {syncError ? (
+          <p className="text-sm text-amber-300">{syncError}</p>
+        ) : activeSyncedRoom ? (
+          <>
+            <p className="text-xs text-neutral-500">
+              Source: {activeSyncedRoom.deviceName}
+              {activeSyncedRoom.updatedAt
+                ? ` · layout synced ${new Date(activeSyncedRoom.updatedAt).toLocaleString()}`
+                : ''}
+              {' · '}{liveOccupancy
+                ? `${liveOccupancy.occupied ? 'Occupied' : 'Unoccupied'} · ${Math.round(liveOccupancy.confidence * 100)}% · state #${liveOccupancy.stateId} · ${liveOccupancy.evidenceCount} evidence · ${new Date((liveOccupancy.since ?? 0) * 1000).toLocaleTimeString()}`
+                : 'occupancy unknown · no fresh high-confidence evidence'}
+            </p>
+            <RoomScene room={activeSyncedRoom.room} people={liveRoomPeople}
+              className="w-full overflow-hidden rounded-xl" />
+          </>
+        ) : (
+          <p className="text-sm text-neutral-500">
+            No node room layouts have synced to this account yet.
+          </p>
+        )}
+      </section>
     </div>
   );
 }

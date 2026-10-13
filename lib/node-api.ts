@@ -131,6 +131,7 @@ export interface RoomDoc {
   }>;
   devices?: Array<{
     device_id: string;
+    device_name?: string;
     pos: V3;
     rot_y?: number;
     mount?: 'wall' | 'table' | 'floor' | 'ceiling' | string;
@@ -144,6 +145,12 @@ export interface RoomDoc {
       fov_deg?: number;
       range_m?: number;
     }>;
+  }>;
+  persons?: Array<{
+    person_id: string;
+    name?: string;
+    pos: V3;
+    room_id?: string;
   }>;
   rooms?: Array<{
     room_id: string;
@@ -175,10 +182,12 @@ export function roomView(doc: RoomDoc, roomId: string): RoomDoc {
   if (roomId === primary) {
     return { ...doc,
       devices: (doc.devices ?? []).filter(
-        (d) => !d.room_id || d.room_id === primary) };
+        (d) => !d.room_id || d.room_id === primary),
+      persons: (doc.persons ?? []).filter(
+        (person) => !person.room_id || person.room_id === primary) };
   }
   const r = (doc.rooms ?? []).find((x) => x.room_id === roomId);
-  if (!r) return { ...doc, devices: [] };
+  if (!r) return { ...doc, devices: [], persons: [] };
   return {
     ...doc,
     room_id: r.room_id,
@@ -188,6 +197,7 @@ export function roomView(doc: RoomDoc, roomId: string): RoomDoc {
     spatial: r.spatial ?? doc.spatial,
     furniture: r.furniture ?? [],
     devices: (doc.devices ?? []).filter((d) => d.room_id === roomId),
+    persons: (doc.persons ?? []).filter((person) => person.room_id === roomId),
   };
 }
 

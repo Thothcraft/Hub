@@ -21,7 +21,6 @@ export default function HomePage() {
           <li><div className="ai-stack-head"><b>DEVICES</b><span>Inspect status, sensors, and node settings.</span></div><div className="ai-stack-actions"><Link className="ai-stack-cmd" href="/devices"><Monitor/> Open devices</Link></div></li>
           <li><div className="ai-stack-head"><b>SPACES</b><span>View room layouts and occupancy.</span></div><div className="ai-stack-actions"><Link className="ai-stack-cmd" href="/spaces"><Map/> Open spaces</Link></div></li>
           <li><div className="ai-stack-head"><b>LIVE CONTEXT</b><span>Review entities, evidence, and inferred state.</span></div><div className="ai-stack-actions"><Link className="ai-stack-cmd" href="/context"><Radio/> Open context</Link></div></li>
-          <li><div className="ai-stack-head"><b>CHAT</b><span>Ask about devices, spaces, and live context.</span></div><div className="ai-stack-actions"><Link className="ai-stack-cmd" href="/chat"><Radio/> Open chat</Link></div></li>
         </ol>
       </div>
     </section>

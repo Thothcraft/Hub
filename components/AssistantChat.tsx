@@ -270,20 +270,65 @@ export default function AssistantChat({ page = false }: { page?: boolean }) {
       { top: scrollRef.current.scrollHeight, behavior: 'smooth' }), 30);
 
   useEffect(() => {
-    try {
-      const saved = JSON.parse(localStorage.getItem(historyStorageKey()) || '[]');
-      if (Array.isArray(saved)) setMessages(saved.slice(-HISTORY_LIMIT * 2));
-    } catch { /* ignore corrupt local history */ }
+    let cancelled = false;
+    const load = async () => {
+      try {
+        const response = await fetch(
+          `/api/brain/chat/history?chat_id=main&limit=${HISTORY_LIMIT}`,
+          { headers: authHeaders(), cache: 'no-store' });
+        if (!response.ok) throw new Error(`history unavailable (${response.status})`);
+        const data = await response.json();
+        const shared = Array.isArray(data.messages) ? data.messages : [];
+        if (shared.length) {
+          if (!cancelled) setMessages(shared.map((m: any) => ({
+            role: m.role === 'assistant' ? 'assistant' : 'user',
+            text: String(m.content ?? ''),
+          })).slice(-HISTORY_LIMIT * 2));
+          return;
+        }
+
+        // Import the older browser-only transcript once; Brain ignores this
+        // if another client has already created shared history.
+        let saved: any[] = [];
+        try {
+          const old = JSON.parse(localStorage.getItem(historyStorageKey()) || '[]');
+          if (Array.isArray(old)) saved = old.slice(-HISTORY_LIMIT * 2);
+        } catch { /* ignore corrupt browser history */ }
+        if (saved.length) {
+          const messages = saved
+            .filter((m) => (m.role === 'user' || m.role === 'assistant') && typeof m.text === 'string')
+            .map((m) => ({ role: m.role, content: m.text }));
+          if (messages.length) {
+            await fetch('/api/brain/chat/history', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json', ...authHeaders() },
+              body: JSON.stringify({ chat_id: 'main', messages }),
+            });
+            if (!cancelled) setMessages(saved);
+          }
+        }
+      } catch { /* chat remains available if shared history cannot load */ }
+    };
+    void load();
     return () => {                       // unmount cleanup
+      cancelled = true;
       streamRef.current?.getTracks().forEach((t) => t.stop());
       audioRef.current?.pause();
     };
   }, []);
 
-  useEffect(() => {
-    try { localStorage.setItem(historyStorageKey(), JSON.stringify(messages.slice(-HISTORY_LIMIT * 2))); }
-    catch { /* storage may be disabled or full */ }
-  }, [messages]);
+  const startNewChat = async () => {
+    try {
+      const response = await fetch('/api/brain/chat/history?chat_id=main', {
+        method: 'DELETE', headers: authHeaders(),
+      });
+      if (!response.ok) throw new Error(`clear failed (${response.status})`);
+      setMessages([]);
+      localStorage.removeItem(historyStorageKey());
+    } catch (e: any) {
+      setConfigMessage(e?.message || 'Could not clear shared history.');
+    }
+  };
 
   const loadSettings = async () => {
     try {
@@ -342,6 +387,7 @@ export default function AssistantChat({ page = false }: { page?: boolean }) {
         headers: { 'Content-Type': 'application/json', ...authHeaders() },
         body: JSON.stringify({
           message: clean,
+          chat_id: 'main',
           history: history.slice(0, -1),   // server appends current msg
           attachments: pending.map((f) => ({
             name: f.name, mime: f.mime, data_b64: f.data_b64 })),
@@ -474,7 +520,7 @@ export default function AssistantChat({ page = false }: { page?: boolean }) {
               <Eye size={16} />
             </button>
             <button onClick={() => { setSettingsOpen((v) => !v); if (!settingsOpen) void loadSettings(); }} title="Chat settings" className={`rounded p-1.5 hover:bg-slate-800 ${settingsOpen ? 'bg-slate-800 text-indigo-300' : ''}`}><Settings2 size={16} /></button>
-            {page && <button onClick={() => { setMessages([]); localStorage.removeItem(historyStorageKey()); }} title="Clear chat history" className="rounded px-2 py-1 text-[11px] text-slate-300 hover:bg-slate-800">New chat</button>}
+            {page && <button onClick={() => void startNewChat()} title="Clear shared chat history" className="rounded px-2 py-1 text-[11px] text-slate-300 hover:bg-slate-800">New chat</button>}
             <button onClick={() => setVoiceMode((v) => !v)}
               title={voiceMode ? 'Voice replies on' : 'Voice replies off'}
               className={`rounded p-1.5 hover:bg-slate-800 ${voiceMode ? 'bg-indigo-600' : ''}`}>
@@ -496,7 +542,7 @@ export default function AssistantChat({ page = false }: { page?: boolean }) {
             <label className="flex items-center justify-between gap-4 py-1">Context window (seconds)<input type="number" min={60} max={86400} value={chatConfig.window_s} onChange={(e) => setChatConfig({ ...chatConfig, window_s: Number(e.target.value) })} className="w-28 rounded border px-2 py-1" /></label>
             {(['include_scenes', 'include_descriptors', 'include_reference', 'include_builder', 'include_usage', 'include_persons_places'] as const).map((key) => <label key={key} className="flex items-center gap-2 py-1"><input type="checkbox" checked={chatConfig[key]} onChange={(e) => setChatConfig({ ...chatConfig, [key]: e.target.checked })} />{key.replace('include_', '').replaceAll('_', ' ')}</label>)}
             <div className="mt-2 flex items-center gap-3"><button onClick={() => void saveSettings()} className="rounded bg-indigo-600 px-3 py-1.5 font-medium text-white">Save settings</button><span>{configMessage}</span></div>
-            <p className="mt-2 text-[10px] text-slate-500">Context memory is the live context map. Conversation history is saved in this browser.</p>
+            <p className="mt-2 text-[10px] text-slate-500">Context settings and conversation history are shared with the Thoth app.</p>
           </div>}
 
           {/* messages */}
